@@ -1,11 +1,5 @@
+import type { StatItem } from "@/types/profit-radar";
 import { StatCard } from "@/components/ui/StatCard";
-
-type StatItem = {
-  label: string;
-  value: string;
-  sub: string;
-  tone?: string;
-};
 
 type StatsGridProps = {
   items: StatItem[];
@@ -13,16 +7,10 @@ type StatsGridProps = {
 
 export function StatsGrid({ items }: StatsGridProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
       {items.map((item) => (
-        <StatCard
-          key={item.label}
-          label={item.label}
-          value={item.value}
-          sub={item.sub}
-          tone={item.tone}
-        />
+        <StatCard key={item.label} {...item} />
       ))}
-    </div>
+    </section>
   );
 }

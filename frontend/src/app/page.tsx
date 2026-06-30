@@ -1,10 +1,9 @@
 import { AIAdviceCard } from "@/components/business/AIAdviceCard";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
+import { DashboardOverviewSection } from "@/components/sections/DashboardOverviewSection";
 import { DangerLeadSection } from "@/components/sections/DangerLeadSection";
 import { PageStack } from "@/components/sections/PageStack";
-import { ProfitSummarySection } from "@/components/sections/ProfitSummarySection";
 import { ReplyQueueSection } from "@/components/sections/ReplyQueueSection";
-import { TaskListSection } from "@/components/sections/TaskListSection";
 import { getHomeDashboard } from "@/services/profitRadarService";
 
 export default async function HomePage() {
@@ -14,19 +13,22 @@ export default async function HomePage() {
     <PageStack>
       <DashboardHeroSection
         title="今日の利益"
-        description="本日見るべき利益候補と、優先対応を整理します。"
+        description="利益・今日やること・返信優先案件を確認します。"
       />
 
-      <ProfitSummarySection items={dashboard.stats} />
+      <DashboardOverviewSection
+        stats={dashboard.stats}
+        tasks={dashboard.tasks}
+      />
 
-      <AIAdviceCard title="今日の最優先判断">
-        利益見込が高く、返信遅延が発生している案件から対応してください。
-        特に株式会社サンプルは本日中にフォローすることで、回収確度を維持できます。
-      </AIAdviceCard>
+      <ReplyQueueSection title="今すぐ返信すべき案件" leads={dashboard.priorityLeads} />
 
-      <TaskListSection title="今日やること" tasks={dashboard.tasks} />
-
-      <ReplyQueueSection title="優先案件" leads={dashboard.priorityLeads} />
+      <AIAdviceCard
+        title="今日の最優先判断"
+        decision="高利益案件から返信してください"
+        reason="返信遅延がある案件ほど、放置による失注リスクが上がります。"
+        nextAction="株式会社サンプルへ本日中にフォロー。"
+      />
 
       <DangerLeadSection risks={dashboard.risks} />
     </PageStack>

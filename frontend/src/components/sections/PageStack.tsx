@@ -3,5 +3,5 @@ type PageStackProps = {
 };
 
 export function PageStack({ children }: PageStackProps) {
-  return <div className="space-y-8">{children}</div>;
+  return <div className="space-y-7">{children}</div>;
 }
