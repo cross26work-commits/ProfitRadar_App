@@ -168,3 +168,9 @@ export function mapApiLeadDetailToLeadDetail(item: ApiLeadDetailResponse): LeadD
     body: item.body,
   };
 }
+
+
+export type ApiResultInsightsResponse = {
+  items: string[];
+  message: string;
+};

@@ -16,6 +16,7 @@ import {
   ApiCustomerListResponse,
   ApiLeadDetailResponse,
   ApiLeadListResponse,
+  ApiResultInsightsResponse,
   ApiResultSummaryResponse,
   ApiTimelineResponse,
   mapApiCustomerDetailToProfile,
@@ -212,9 +213,14 @@ export async function getLeadDetail(leadId = 1): Promise<LeadDetailData> {
 
 export async function getResultsDashboard(): Promise<ResultsDashboardData> {
   try {
+    const [stats, insightsResponse] = await Promise.all([
+      getDashboardStats(resultStats),
+      apiGet<ApiResultInsightsResponse>("/results/insights"),
+    ]);
+
     return {
-      stats: await getDashboardStats(resultStats),
-      insights: resultInsights,
+      stats,
+      insights: insightsResponse.items.length > 0 ? insightsResponse.items : resultInsights,
     };
   } catch {
     return {
