@@ -103,11 +103,16 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
 
 export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
   try {
-    const response = await apiGet<ApiCustomerListResponse>("/customers");
-    const apiCustomers = response.items.map(mapApiCustomerToCustomer);
+    const [customersResponse, resultsSummary] = await Promise.all([
+      apiGet<ApiCustomerListResponse>("/customers"),
+      apiGet<ApiResultSummaryResponse>("/results/summary"),
+    ]);
+
+    const apiCustomers = customersResponse.items.map(mapApiCustomerToCustomer);
+    const apiStats = mapResultSummaryToStats(resultsSummary);
 
     return {
-      stats: customerStats,
+      stats: apiStats.length > 0 ? apiStats : customerStats,
       customers: apiCustomers.length > 0 ? apiCustomers : customers,
     };
   } catch {
