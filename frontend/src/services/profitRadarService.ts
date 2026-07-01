@@ -1,4 +1,4 @@
-import type { Customer, Lead, StatItem, Task, Timeline } from "@/types/profit-radar";
+import type { Customer, CustomerProfile, Lead, StatItem, Task, Timeline } from "@/types/profit-radar";
 import { apiGet } from "@/lib/api";
 import { homePriorityLeads, homeRisks, homeStats, homeTasks } from "@/data/mock/home";
 import { replyLeads, replyStats } from "@/data/mock/reply";
@@ -12,11 +12,15 @@ import {
 import { leadDetailStats, leadTimeline } from "@/data/mock/leads";
 import { resultInsights, resultStats } from "@/data/mock/results";
 import {
+  ApiCustomerDetailResponse,
   ApiCustomerListResponse,
   ApiLeadListResponse,
   ApiResultSummaryResponse,
+  ApiTimelineResponse,
+  mapApiCustomerDetailToProfile,
   mapApiCustomerToCustomer,
   mapApiLeadToLead,
+  mapApiTimelineToTimeline,
   mapResultSummaryToStats,
 } from "@/services/profitRadarMappers";
 
@@ -38,6 +42,7 @@ export type CustomersDashboardData = {
 };
 
 export type CustomerDetailData = {
+  profile: CustomerProfile;
   stats: StatItem[];
   leads: Lead[];
   timeline: Timeline[];
@@ -131,12 +136,39 @@ export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
   }
 }
 
-export async function getCustomerDetail(): Promise<CustomerDetailData> {
-  return {
-    stats: customerDetailStats,
-    leads: customerDetailLeads,
-    timeline: customerTimeline,
-  };
+export async function getCustomerDetail(customerId = 1): Promise<CustomerDetailData> {
+  try {
+    const [profileResponse, leadsResponse, timelineResponse, apiStats] = await Promise.all([
+      apiGet<ApiCustomerDetailResponse>(`/customers/${customerId}`),
+      apiGet<ApiLeadListResponse>(`/customers/${customerId}/leads`),
+      apiGet<ApiTimelineResponse>(`/customers/${customerId}/timeline`),
+      getDashboardStats(customerDetailStats),
+    ]);
+
+    const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
+    const apiTimeline = timelineResponse.items.map(mapApiTimelineToTimeline);
+
+    return {
+      profile: mapApiCustomerDetailToProfile(profileResponse),
+      stats: apiStats.length > 0 ? apiStats : customerDetailStats,
+      leads: apiLeads.length > 0 ? apiLeads : customerDetailLeads,
+      timeline: apiTimeline.length > 0 ? apiTimeline : customerTimeline,
+    };
+  } catch {
+    return {
+      profile: {
+        id: 1,
+        name: "株式会社サンプル",
+        contact: "佐藤様",
+        email: "sample@example.com",
+        status: "商談中",
+        nextAction: "本日中に再フォロー",
+      },
+      stats: customerDetailStats,
+      leads: customerDetailLeads,
+      timeline: customerTimeline,
+    };
+  }
 }
 
 export async function getLeadDetail(): Promise<LeadDetailData> {

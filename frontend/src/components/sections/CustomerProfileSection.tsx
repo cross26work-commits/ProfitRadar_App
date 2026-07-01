@@ -1,19 +1,24 @@
+import type { CustomerProfile } from "@/types/profit-radar";
 import { DetailPanel } from "./DetailPanel";
 import { Badge } from "../ui/Badge";
 import { DetailField } from "../ui/DetailField";
 import { InfoGrid } from "../ui/InfoGrid";
 
-export function CustomerProfileSection() {
+type CustomerProfileSectionProps = {
+  profile: CustomerProfile;
+};
+
+export function CustomerProfileSection({ profile }: CustomerProfileSectionProps) {
   return (
     <DetailPanel title="顧客情報">
       <InfoGrid
         items={[
-          { label: "担当者", value: "佐藤様" },
-          { label: "メール", value: "sample@example.com" },
-          { label: "次の行動", value: "本日中に再フォロー" },
+          { label: "担当者", value: profile.contact },
+          { label: "メール", value: profile.email },
+          { label: "次の行動", value: profile.nextAction },
         ]}
       />
-      <DetailField label="状態" value={<Badge tone="green">商談中</Badge>} />
+      <DetailField label="状態" value={<Badge tone="green">{profile.status}</Badge>} />
     </DetailPanel>
   );
 }

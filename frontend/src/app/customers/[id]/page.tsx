@@ -7,19 +7,24 @@ import { ProfitSummarySection } from "@/components/sections/ProfitSummarySection
 import { RecentActivitySection } from "@/components/sections/RecentActivitySection";
 import { getCustomerDetail } from "@/services/profitRadarService";
 
-export default async function CustomerDetailPage() {
-  const customer = await getCustomerDetail();
+type CustomerDetailPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function CustomerDetailPage({ params }: CustomerDetailPageProps) {
+  const { id } = await params;
+  const customer = await getCustomerDetail(Number(id));
 
   return (
     <PageStack>
       <DashboardHeroSection
-        title="株式会社サンプル"
+        title={customer.profile.name}
         description="顧客情報・タイムライン・利益・次の行動を一画面で確認します。"
       />
 
       <ProfitSummarySection items={customer.stats} />
 
-      <CustomerProfileSection />
+      <CustomerProfileSection profile={customer.profile} />
 
       <AIAdviceCard title="次の行動">
         見積確認で停止しているため、まずメールで軽く再確認してください。

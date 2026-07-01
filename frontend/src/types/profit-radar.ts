@@ -35,3 +35,13 @@ export type Task = {
   title: string;
   description: string;
 };
+
+
+export type CustomerProfile = {
+  id: number;
+  name: string;
+  contact: string;
+  email: string;
+  status: string;
+  nextAction: string;
+};

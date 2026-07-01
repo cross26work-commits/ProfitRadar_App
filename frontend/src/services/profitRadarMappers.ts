@@ -1,4 +1,4 @@
-import type { Customer, Lead, StatItem } from "@/types/profit-radar";
+import type { Customer, CustomerProfile, Lead, StatItem, Timeline } from "@/types/profit-radar";
 
 export type ApiLeadItem = {
   id: number;
@@ -95,4 +95,45 @@ export function mapResultSummaryToStats(summary: ApiResultSummaryResponse): Stat
       sub: "実回収 / 見込",
     },
   ];
+}
+
+
+export type ApiCustomerDetailResponse = {
+  id: number;
+  name: string;
+  contact: string;
+  email: string;
+  status: string;
+  next_action: string;
+};
+
+export type ApiTimelineItem = {
+  type: string;
+  title: string;
+  body: string;
+  time: string;
+};
+
+export type ApiTimelineResponse = {
+  items: ApiTimelineItem[];
+};
+
+export function mapApiCustomerDetailToProfile(item: ApiCustomerDetailResponse): CustomerProfile {
+  return {
+    id: item.id,
+    name: item.name,
+    contact: item.contact,
+    email: item.email,
+    status: item.status,
+    nextAction: item.next_action,
+  };
+}
+
+export function mapApiTimelineToTimeline(item: ApiTimelineItem): Timeline {
+  return {
+    type: item.type,
+    title: item.title,
+    body: item.body,
+    time: item.time,
+  };
 }
