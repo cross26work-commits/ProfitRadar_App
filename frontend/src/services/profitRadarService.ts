@@ -81,11 +81,16 @@ export async function getHomeDashboard(): Promise<HomeDashboardData> {
 
 export async function getReplyDashboard(): Promise<ReplyDashboardData> {
   try {
-    const response = await apiGet<ApiLeadListResponse>("/leads");
-    const apiLeads = response.items.map(mapApiLeadToLead);
+    const [leadsResponse, resultsSummary] = await Promise.all([
+      apiGet<ApiLeadListResponse>("/leads"),
+      apiGet<ApiResultSummaryResponse>("/results/summary"),
+    ]);
+
+    const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
+    const apiStats = mapResultSummaryToStats(resultsSummary);
 
     return {
-      stats: replyStats,
+      stats: apiStats.length > 0 ? apiStats : replyStats,
       leads: apiLeads.length > 0 ? apiLeads : replyLeads,
     };
   } catch {
