@@ -1,4 +1,4 @@
-import type { Customer, CustomerProfile, Lead, StatItem, Timeline } from "@/types/profit-radar";
+import type { Customer, CustomerProfile, Lead, LeadDetail, StatItem, Timeline } from "@/types/profit-radar";
 
 export type ApiLeadItem = {
   id: number;
@@ -135,5 +135,36 @@ export function mapApiTimelineToTimeline(item: ApiTimelineItem): Timeline {
     title: item.title,
     body: item.body,
     time: item.time,
+  };
+}
+
+
+export type ApiLeadDetailResponse = {
+  id: number;
+  customer: string;
+  subject: string;
+  priority: string;
+  category: string;
+  status: string;
+  estimated_profit: number;
+  recoverable_profit: number;
+  delay_days: number;
+  next_action: string;
+  body: string;
+};
+
+export function mapApiLeadDetailToLeadDetail(item: ApiLeadDetailResponse): LeadDetail {
+  return {
+    id: item.id,
+    customer: item.customer,
+    subject: item.subject,
+    priority: mapPriority(item.priority),
+    category: item.category,
+    status: item.status,
+    estimatedProfit: formatYen(item.estimated_profit),
+    recoverableProfit: formatYen(item.recoverable_profit),
+    delayDays: item.delay_days,
+    nextAction: item.next_action,
+    body: item.body,
   };
 }

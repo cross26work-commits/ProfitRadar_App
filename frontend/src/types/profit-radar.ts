@@ -45,3 +45,18 @@ export type CustomerProfile = {
   status: string;
   nextAction: string;
 };
+
+
+export type LeadDetail = {
+  id: number;
+  customer: string;
+  subject: string;
+  priority: string;
+  category: string;
+  status: string;
+  estimatedProfit: string;
+  recoverableProfit: string;
+  delayDays: number;
+  nextAction: string;
+  body: string;
+};

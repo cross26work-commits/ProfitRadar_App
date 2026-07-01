@@ -1,4 +1,4 @@
-import type { Customer, CustomerProfile, Lead, StatItem, Task, Timeline } from "@/types/profit-radar";
+import type { Customer, CustomerProfile, Lead, LeadDetail, StatItem, Task, Timeline } from "@/types/profit-radar";
 import { apiGet } from "@/lib/api";
 import { homePriorityLeads, homeRisks, homeStats, homeTasks } from "@/data/mock/home";
 import { replyLeads, replyStats } from "@/data/mock/reply";
@@ -14,11 +14,13 @@ import { resultInsights, resultStats } from "@/data/mock/results";
 import {
   ApiCustomerDetailResponse,
   ApiCustomerListResponse,
+  ApiLeadDetailResponse,
   ApiLeadListResponse,
   ApiResultSummaryResponse,
   ApiTimelineResponse,
   mapApiCustomerDetailToProfile,
   mapApiCustomerToCustomer,
+  mapApiLeadDetailToLeadDetail,
   mapApiLeadToLead,
   mapApiTimelineToTimeline,
   mapResultSummaryToStats,
@@ -49,6 +51,7 @@ export type CustomerDetailData = {
 };
 
 export type LeadDetailData = {
+  detail: LeadDetail;
   stats: StatItem[];
   timeline: Timeline[];
 };
@@ -171,11 +174,40 @@ export async function getCustomerDetail(customerId = 1): Promise<CustomerDetailD
   }
 }
 
-export async function getLeadDetail(): Promise<LeadDetailData> {
-  return {
-    stats: leadDetailStats,
-    timeline: leadTimeline,
-  };
+export async function getLeadDetail(leadId = 1): Promise<LeadDetailData> {
+  try {
+    const [detailResponse, timelineResponse, apiStats] = await Promise.all([
+      apiGet<ApiLeadDetailResponse>(`/leads/${leadId}`),
+      apiGet<ApiTimelineResponse>(`/leads/${leadId}/timeline`),
+      getDashboardStats(leadDetailStats),
+    ]);
+
+    const apiTimeline = timelineResponse.items.map(mapApiTimelineToTimeline);
+
+    return {
+      detail: mapApiLeadDetailToLeadDetail(detailResponse),
+      stats: apiStats.length > 0 ? apiStats : leadDetailStats,
+      timeline: apiTimeline.length > 0 ? apiTimeline : leadTimeline,
+    };
+  } catch {
+    return {
+      detail: {
+        id: 1,
+        customer: "株式会社サンプル",
+        subject: "見積のご確認について",
+        priority: "高",
+        category: "見積",
+        status: "waiting_reply",
+        estimatedProfit: "¥120,000",
+        recoverableProfit: "¥100,000",
+        delayDays: 3,
+        nextAction: "本日中に確認フォロー",
+        body: "お世話になっております。先日いただいた見積内容について確認させてください。条件面を再度確認したうえで、進行可否をご連絡いたします。",
+      },
+      stats: leadDetailStats,
+      timeline: leadTimeline,
+    };
+  }
 }
 
 export async function getResultsDashboard(): Promise<ResultsDashboardData> {

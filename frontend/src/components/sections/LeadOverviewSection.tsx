@@ -1,3 +1,4 @@
+import type { LeadDetail } from "@/types/profit-radar";
 import { DetailPanel } from "./DetailPanel";
 import { ActionBar } from "../ui/ActionBar";
 import { Badge } from "../ui/Badge";
@@ -5,30 +6,31 @@ import { DetailField } from "../ui/DetailField";
 import { InfoGrid } from "../ui/InfoGrid";
 import { MessageBox } from "../ui/MessageBox";
 
-export function LeadOverviewSection() {
+type LeadOverviewSectionProps = {
+  lead: LeadDetail;
+};
+
+export function LeadOverviewSection({ lead }: LeadOverviewSectionProps) {
   return (
     <DetailPanel title="案件情報">
       <ActionBar>
-        <Badge tone="danger">高優先度</Badge>
-        <Badge tone="green">見積</Badge>
-        <Badge>3日放置</Badge>
+        <Badge tone="danger">{lead.priority}優先度</Badge>
+        <Badge tone="green">{lead.category}</Badge>
+        <Badge>{lead.delayDays}日放置</Badge>
       </ActionBar>
 
       <InfoGrid
         items={[
-          { label: "顧客", value: "株式会社サンプル" },
-          { label: "次の行動", value: "本日中に確認フォロー" },
+          { label: "顧客", value: lead.customer },
+          { label: "見込利益", value: lead.estimatedProfit },
+          { label: "回収可能利益", value: lead.recoverableProfit },
+          { label: "次の行動", value: lead.nextAction },
         ]}
       />
 
       <DetailField
         label="メール本文"
-        value={
-          <MessageBox>
-            お世話になっております。先日いただいた見積内容について確認させてください。
-            条件面を再度確認したうえで、進行可否をご連絡いたします。
-          </MessageBox>
-        }
+        value={<MessageBox>{lead.body}</MessageBox>}
       />
     </DetailPanel>
   );

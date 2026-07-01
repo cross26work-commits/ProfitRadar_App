@@ -11,19 +11,24 @@ import { ActionBar } from "@/components/ui/ActionBar";
 import { Button } from "@/components/ui/Button";
 import { getLeadDetail } from "@/services/profitRadarService";
 
-export default async function LeadDetailPage() {
-  const lead = await getLeadDetail();
+type LeadDetailPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function LeadDetailPage({ params }: LeadDetailPageProps) {
+  const { id } = await params;
+  const lead = await getLeadDetail(Number(id));
 
   return (
     <PageStack>
       <DashboardHeroSection
-        title="見積のご確認について"
+        title={lead.detail.subject}
         description="案件詳細・AI判断・返信文・実利益を管理します。"
       />
 
       <ProfitSummarySection items={lead.stats} />
 
-      <LeadOverviewSection />
+      <LeadOverviewSection lead={lead.detail} />
 
       <AIAdviceCard title="AI分析">
         この案件は見積確認段階で停止しています。放置が続くと失注リスクが上がるため、
