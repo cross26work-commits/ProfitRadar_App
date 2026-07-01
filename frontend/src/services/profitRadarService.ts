@@ -53,15 +53,25 @@ export type ResultsDashboardData = {
   insights: string[];
 };
 
+async function getDashboardStats(fallbackStats: StatItem[]): Promise<StatItem[]> {
+  try {
+    const response = await apiGet<ApiResultSummaryResponse>("/results/summary");
+    const apiStats = mapResultSummaryToStats(response);
+
+    return apiStats.length > 0 ? apiStats : fallbackStats;
+  } catch {
+    return fallbackStats;
+  }
+}
+
 export async function getHomeDashboard(): Promise<HomeDashboardData> {
   try {
-    const [leadsResponse, resultsSummary] = await Promise.all([
+    const [leadsResponse, apiStats] = await Promise.all([
       apiGet<ApiLeadListResponse>("/leads"),
-      apiGet<ApiResultSummaryResponse>("/results/summary"),
+      getDashboardStats(homeStats),
     ]);
 
     const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
-    const apiStats = mapResultSummaryToStats(resultsSummary);
 
     return {
       stats: apiStats.length > 0 ? apiStats : homeStats,
@@ -81,13 +91,12 @@ export async function getHomeDashboard(): Promise<HomeDashboardData> {
 
 export async function getReplyDashboard(): Promise<ReplyDashboardData> {
   try {
-    const [leadsResponse, resultsSummary] = await Promise.all([
+    const [leadsResponse, apiStats] = await Promise.all([
       apiGet<ApiLeadListResponse>("/leads"),
-      apiGet<ApiResultSummaryResponse>("/results/summary"),
+      getDashboardStats(homeStats),
     ]);
 
     const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
-    const apiStats = mapResultSummaryToStats(resultsSummary);
 
     return {
       stats: apiStats.length > 0 ? apiStats : replyStats,
@@ -103,13 +112,12 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
 
 export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
   try {
-    const [customersResponse, resultsSummary] = await Promise.all([
+    const [customersResponse, apiStats] = await Promise.all([
       apiGet<ApiCustomerListResponse>("/customers"),
-      apiGet<ApiResultSummaryResponse>("/results/summary"),
+      getDashboardStats(customerStats),
     ]);
 
     const apiCustomers = customersResponse.items.map(mapApiCustomerToCustomer);
-    const apiStats = mapResultSummaryToStats(resultsSummary);
 
     return {
       stats: apiStats.length > 0 ? apiStats : customerStats,
@@ -140,10 +148,8 @@ export async function getLeadDetail(): Promise<LeadDetailData> {
 
 export async function getResultsDashboard(): Promise<ResultsDashboardData> {
   try {
-    const response = await apiGet<ApiResultSummaryResponse>("/results/summary");
-
     return {
-      stats: mapResultSummaryToStats(response),
+      stats: await getDashboardStats(resultStats),
       insights: resultInsights,
     };
   } catch {
