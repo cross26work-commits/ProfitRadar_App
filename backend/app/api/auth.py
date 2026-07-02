@@ -1,66 +1,34 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class RegisterRequest(BaseModel):
-    company_name: str
-    name: str
-    email: str
-    password: str
-
-
 @router.get("/me")
-def current_user():
-    return {
-        "user": {
-            "id": 1,
-            "email": "demo@example.com",
-            "name": "Demo User",
-        },
-        "company": {
-            "id": 1,
-            "name": "Demo Company",
-            "role": "owner",
-        },
-        "authenticated": False,
-        "message": "Auth is stubbed for Phase3",
-    }
+def current_user(user=Depends(get_current_user)):
+    try:
+        return {
+            "authenticated": True,
+            "user": user,
+        }
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"/auth/me failed: {error}",
+        )
 
 
 @router.post("/login")
-def login(payload: LoginRequest):
-    return {
-        "authenticated": False,
-        "message": "Login endpoint is stubbed for Phase3",
-        "email": payload.email,
-    }
+def login_stub():
+    return {"message": "Login is handled by Supabase Auth on frontend."}
 
 
 @router.post("/register")
-def register(payload: RegisterRequest):
-    return {
-        "authenticated": False,
-        "message": "Register endpoint is stubbed for Phase3",
-        "user": {
-            "name": payload.name,
-            "email": payload.email,
-        },
-        "company": {
-            "name": payload.company_name,
-        },
-    }
+def register_stub():
+    return {"message": "Register is handled by Supabase Auth on frontend."}
 
 
 @router.post("/logout")
-def logout():
-    return {
-        "authenticated": False,
-        "message": "Logout endpoint is stubbed for Phase3",
-    }
+def logout_stub():
+    return {"message": "Logout is handled by Supabase Auth on frontend."}

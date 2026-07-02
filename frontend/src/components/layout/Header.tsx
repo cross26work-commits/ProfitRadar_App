@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/Button";
+import { getAuthMe } from "@/services/auth/meService";
 
 export function Header({
   title,
@@ -18,6 +19,12 @@ export function Header({
     await logout();
     router.replace("/login");
     router.refresh();
+  }
+
+  async function handleAuthMeTest() {
+    const result = await getAuthMe();
+    console.log("AUTH ME:", result);
+    alert("JWT認証OK: /auth/me");
   }
 
   const userLabel = profile?.name ?? session?.user.email ?? "未取得";
@@ -45,6 +52,10 @@ export function Header({
               {userLabel}
             </p>
           </div>
+
+          <Button variant="secondary" onClick={handleAuthMeTest}>
+            認証確認
+          </Button>
 
           <Button variant="secondary" onClick={handleLogout}>
             ログアウト
