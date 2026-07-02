@@ -1,3 +1,6 @@
+
+from app.routers import revenue, timeline, learning
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -43,3 +46,10 @@ app.include_router(sms_router)
 app.include_router(ai_router)
 app.include_router(settings_router)
 app.include_router(auth_router)
+
+
+
+app.include_router(revenue.router)
+app.include_router(timeline.router)
+app.include_router(learning.router)
+
