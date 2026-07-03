@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
+
 from app.api import reply, self_evaluation, sales_forecast, profit_events, actions, home_brief, dashboard_home
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

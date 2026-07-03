@@ -1,5 +1,9 @@
 from fastapi import APIRouter, Header, HTTPException
 from app.core.supabase_client import get_supabase_client
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from email.message import EmailMessage
+import base64
 
 router = APIRouter(prefix="/reply", tags=["reply"])
 
@@ -130,6 +134,7 @@ def save_reply_draft(
         "saved": True,
         "timeline_event": (timeline.data or [None])[0],
         "learning_event": (learning.data or [None])[0],
+        "gmail_result": gmail_result,
     }
 
 
@@ -171,21 +176,61 @@ def send_reply_mock(
     if not customer_id:
         customer_id = event.get("customer_id")
 
-    # NOTE:
-    # actionsテーブルは現時点のSupabaseに未確定のため保存しない。
-    # Phase6-1では timeline + learning_logs へ疑似送信履歴を保存する。
+    conn = (
+        db.table("gmail_connections")
+        .select("*")
+        .eq("company_id", x_company_id)
+        .eq("status", "connected")
+        .limit(1)
+        .execute()
+    )
+
+    rows = conn.data or []
+    if not rows:
+        raise HTTPException(status_code=400, detail="Gmail is not connected")
+
+    token_json = rows[0]["token_json"]
+
+    credentials = Credentials(
+        token=token_json["token"],
+        refresh_token=token_json["refresh_token"],
+        token_uri=token_json["token_uri"],
+        client_id=token_json["client_id"],
+        client_secret=token_json["client_secret"],
+        scopes=token_json["scopes"],
+    )
+
+    service = build("gmail", "v1", credentials=credentials)
+
+    message = EmailMessage()
+    message.set_content(body)
+    message["To"] = to_email
+    message["From"] = "me"
+    message["Subject"] = subject
+
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+    gmail_result = (
+        service.users()
+        .messages()
+        .send(
+            userId="me",
+            body={"raw": raw},
+        )
+        .execute()
+    )
 
     timeline_payload = {
         "company_id": x_company_id,
         "customer_id": customer_id,
         "profit_event_id": event_id,
-        "event_type": "reply_sent_mock",
+        "event_type": "reply_sent_gmail",
         "channel": "gmail",
-        "title": "返信を疑似送信",
+        "title": "Gmail返信を送信",
         "description": body[:500],
         "amount": 0,
         "metadata": {
-            "mode": "mock",
+            "mode": "gmail",
             "subject": subject,
             "to_email": to_email,
         },
@@ -197,13 +242,13 @@ def send_reply_mock(
         "company_id": x_company_id,
         "customer_id": customer_id,
         "profit_event_id": event_id,
-        "event_type": "reply_sent_mock",
+        "event_type": "reply_sent_gmail",
         "input_data": payload,
         "result_data": {
             "body": body,
             "subject": subject,
             "to_email": to_email,
-            "mode": "mock",
+            "mode": "gmail",
         },
         "success": True,
         "actual_profit": 0,
@@ -213,8 +258,9 @@ def send_reply_mock(
 
     return {
         "sent": True,
-        "mode": "mock",
-        "message": "Gmail未接続のため疑似送信として保存しました。",
+        "mode": "gmail",
+        "message": "Gmailから送信しました。",
         "timeline_event": (timeline.data or [None])[0],
         "learning_event": (learning.data or [None])[0],
+        "gmail_result": gmail_result,
     }
