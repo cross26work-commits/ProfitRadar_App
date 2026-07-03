@@ -17,3 +17,8 @@ frontend/.env.*
 
 # Backups
 backups/
+
+# Local SQLite databases
+*.db
+*.sqlite
+*.sqlite3
