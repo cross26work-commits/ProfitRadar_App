@@ -37,8 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function refreshProfile() {
-    const appProfile = await getCurrentAppProfile();
-    setProfile(appProfile);
+    try {
+      const appProfile = await getCurrentAppProfile();
+      setProfile(appProfile);
+    } catch (error) {
+      console.warn("Profile load failed:", error);
+      setProfile(null);
+    }
   }
 
   async function logout() {
@@ -48,34 +53,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let mounted = true;
+
     async function initializeAuth() {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
+      try {
+        const { data } = await supabase.auth.getSession();
 
-      if (data.session) {
-        await refreshProfile();
+        if (!mounted) return;
+
+        setSession(data.session);
+
+        if (data.session) {
+          await refreshProfile();
+        } else {
+          setProfile(null);
+        }
+      } catch (error) {
+        console.warn("Auth initialize failed:", error);
+        if (mounted) {
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     }
 
     initializeAuth();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
 
-      if (session) {
-        await refreshProfile();
+      if (nextSession) {
+        refreshProfile().finally(() => setLoading(false));
       } else {
         setProfile(null);
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (

@@ -24,8 +24,8 @@ export function TimelineSection({ title, items }: TimelineSectionProps) {
           <EmptyState title="履歴がありません" description="メール・SMS・対応履歴はまだありません。" />
         ) : (
           <div className="space-y-5">
-            {items.map((item) => (
-              <TimelineItem key={`${item.type}-${item.title}-${item.time}`} {...item} />
+            {items.map((item, index) => (
+              <TimelineItem key={`${item.type}-${item.title}-${item.time}-${index}`} {...item} />
             ))}
           </div>
         )}

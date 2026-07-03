@@ -4,9 +4,11 @@ from postgrest.exceptions import APIError
 from app.core.supabase_client import SupabaseConfigError, get_supabase_client
 from app.repositories.learning_repository import LearningRepository
 from app.repositories.profit_event_repository import ProfitEventRepository
+from app.repositories.customer_repository import CustomerRepository
 from app.repositories.timeline_repository import TimelineRepository
 from app.services.event_service import EventService
 from app.services.revenue_service import RevenueService
+from app.services.customer_resolver_service import CustomerResolverService
 
 router = APIRouter(prefix="/revenue", tags=["revenue"])
 
@@ -36,6 +38,9 @@ def analyze_and_save_revenue(
         service = RevenueService(
             repository=ProfitEventRepository(db=db),
             event_service=event_service,
+            customer_resolver=CustomerResolverService(
+                repository=CustomerRepository(db=db),
+            ),
         )
 
         return service.analyze_and_save(company_id=x_company_id, payload=payload)

@@ -1,11 +1,13 @@
 export type StatItem = {
   label: string;
   value: string;
-  sub: string;
+  sub?: string;
+  helper?: string;
   tone?: string;
 };
 
 export type Lead = {
+  id: string | number;
   href?: string;
   rank: number;
   customer: string;
@@ -13,9 +15,16 @@ export type Lead = {
   profit: string;
   priority: string;
   delay: string;
+  category?: string;
+  status?: string;
+  estimatedProfit?: string;
+  recoverableProfit?: string;
+  delayDays?: number;
+  nextAction?: string;
 };
 
 export type Customer = {
+  id?: string | number;
   href?: string;
   name: string;
   leads: number;
@@ -34,11 +43,12 @@ export type Task = {
   id?: string | number;
   title: string;
   description: string;
+  href?: string;
 };
 
 
 export type CustomerProfile = {
-  id: number;
+  id: string | number;
   name: string;
   contact: string;
   email: string;
@@ -48,7 +58,7 @@ export type CustomerProfile = {
 
 
 export type LeadDetail = {
-  id: number;
+  id: string | number;
   customer: string;
   subject: string;
   priority: string;

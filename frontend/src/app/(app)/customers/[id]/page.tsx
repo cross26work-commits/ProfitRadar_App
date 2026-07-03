@@ -13,7 +13,7 @@ type CustomerDetailPageProps = {
 
 export default async function CustomerDetailPage({ params }: CustomerDetailPageProps) {
   const { id } = await params;
-  const customer = await getCustomerDetail(Number(id));
+  const customer = await getCustomerDetail(id);
 
   return (
     <PageStack>

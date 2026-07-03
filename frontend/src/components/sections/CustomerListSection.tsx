@@ -2,6 +2,7 @@ import { CustomerCard } from "@/components/business/CustomerCard";
 import { EmptyState } from "@/components/feedback/EmptyState";
 
 type Customer = {
+  id?: string | number;
   href?: string;
   name: string;
   leads: number;
@@ -24,7 +25,7 @@ export function CustomerListSection({ title, customers }: CustomerListSectionPro
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {customers.map((customer) => (
-            <CustomerCard key={customer.name} {...customer} />
+            <CustomerCard key={customer.id ?? customer.href ?? customer.name} {...customer} />
           ))}
         </div>
       )}

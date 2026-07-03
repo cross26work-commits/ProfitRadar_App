@@ -1,7 +1,7 @@
 import type { Customer, CustomerProfile, Lead, LeadDetail, StatItem, Timeline } from "@/types/profit-radar";
 
 export type ApiLeadItem = {
-  id: number;
+  id: string | number;
   customer: string;
   subject: string;
   priority: string;
@@ -18,7 +18,7 @@ export type ApiLeadListResponse = {
 };
 
 export type ApiCustomerItem = {
-  id: number;
+  id: string | number;
   name: string;
   leads: number;
   profit: number;
@@ -52,6 +52,7 @@ export function mapPriority(priority: string): string {
 
 export function mapApiLeadToLead(item: ApiLeadItem, index: number): Lead {
   return {
+    id: String(item.id),
     href: item.href ?? `/leads/${item.id}`,
     rank: index + 1,
     customer: item.customer,
@@ -64,6 +65,7 @@ export function mapApiLeadToLead(item: ApiLeadItem, index: number): Lead {
 
 export function mapApiCustomerToCustomer(item: ApiCustomerItem): Customer {
   return {
+    id: item.id,
     href: item.href ?? `/customers/${item.id}`,
     name: item.name,
     leads: item.leads,
@@ -99,7 +101,7 @@ export function mapResultSummaryToStats(summary: ApiResultSummaryResponse): Stat
 
 
 export type ApiCustomerDetailResponse = {
-  id: number;
+  id: string | number;
   name: string;
   contact: string;
   email: string;
@@ -140,7 +142,7 @@ export function mapApiTimelineToTimeline(item: ApiTimelineItem): Timeline {
 
 
 export type ApiLeadDetailResponse = {
-  id: number;
+  id: string | number;
   customer: string;
   subject: string;
   priority: string;
@@ -219,3 +221,28 @@ export function mapDashboardSummaryToStats(
     },
   ];
 }
+
+
+export type ApiSalesForecastResponse = {
+  company_id: string;
+  actual_profit: number;
+  estimated_profit: number;
+  open_profit: number;
+  closed_profit: number;
+  hot_open_profit: number;
+  forecast: {
+    conservative: number;
+    standard: number;
+    aggressive: number;
+  };
+  message: string;
+};
+
+
+export type ApiSelfEvaluationSummaryResponse = {
+  company_id: string;
+  count: number;
+  success_count: number;
+  avg_accuracy: number;
+  message: string;
+};

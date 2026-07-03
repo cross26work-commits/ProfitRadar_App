@@ -1,3 +1,4 @@
+from app.api import reply, self_evaluation, sales_forecast, profit_events, actions, home_brief, dashboard_home
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -53,3 +54,10 @@ app.include_router(revenue.router)
 app.include_router(timeline.router)
 app.include_router(learning.router)
 app.include_router(customers_v2.router)
+app.include_router(actions.router)
+app.include_router(home_brief.router)
+app.include_router(dashboard_home.router)
+app.include_router(profit_events.router)
+app.include_router(sales_forecast.router)
+app.include_router(self_evaluation.router)
+app.include_router(reply.router)

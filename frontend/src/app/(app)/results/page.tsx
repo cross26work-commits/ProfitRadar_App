@@ -2,6 +2,8 @@ import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection
 import { PageStack } from "@/components/sections/PageStack";
 import { ProfitSummarySection } from "@/components/sections/ProfitSummarySection";
 import { ResultsSummarySection } from "@/components/sections/ResultsSummarySection";
+import { SalesForecastSection } from "@/components/sections/SalesForecastSection";
+import { SelfEvaluationSection } from "@/components/sections/SelfEvaluationSection";
 import { getResultsDashboard } from "@/services/profitRadarService";
 
 export default async function ResultsPage() {
@@ -15,6 +17,10 @@ export default async function ResultsPage() {
       />
 
       <ProfitSummarySection items={results.stats} />
+
+      <SalesForecastSection forecast={results.forecast} />
+
+      <SelfEvaluationSection evaluation={results.selfEvaluation} />
 
       <ResultsSummarySection insights={results.insights} />
     </PageStack>

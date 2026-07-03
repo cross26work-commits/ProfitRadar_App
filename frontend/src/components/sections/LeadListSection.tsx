@@ -17,7 +17,7 @@ export function LeadListSection({ title, leads }: LeadListSectionProps) {
           <EmptyState title="案件がありません" description="表示できる利益候補はありません。" />
         ) : (
           leads.map((lead) => (
-            <LeadCard key={`${lead.customer}-${lead.subject}-${lead.rank}`} lead={lead} />
+            <LeadCard key={lead.id} lead={lead} />
           ))
         )}
       </div>

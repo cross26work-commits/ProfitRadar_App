@@ -22,6 +22,7 @@ export const customerDetailStats: StatItem[] = [
 
 export const customerDetailLeads: Lead[] = [
   {
+    id: "1",
     href: "/leads/1",
     rank: 1,
     customer: "株式会社サンプル",
@@ -31,6 +32,7 @@ export const customerDetailLeads: Lead[] = [
     delay: "3日放置",
   },
   {
+    id: "2",
     href: "/leads/2",
     rank: 2,
     customer: "株式会社サンプル",
