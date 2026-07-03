@@ -9,7 +9,7 @@ from app.api.results import router as results_router
 from app.api.settings import router as settings_router
 from app.api.sms import router as sms_router
 from app.routers import customers as customers_v2
-from app.routers import learning, revenue, timeline
+from app.routers import dashboard, learning, revenue, timeline
 
 app = FastAPI(
     title="Profit Radar API",
@@ -47,6 +47,7 @@ app.include_router(settings_router)
 app.include_router(auth_router)
 
 # Phase4+ real-data routers
+app.include_router(dashboard.router)
 app.include_router(revenue.router)
 app.include_router(timeline.router)
 app.include_router(learning.router)
