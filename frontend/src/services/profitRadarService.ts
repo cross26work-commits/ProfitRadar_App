@@ -17,6 +17,8 @@ import {
   ApiLeadDetailResponse,
   ApiLeadListResponse,
   ApiResultInsightsResponse,
+  ApiDashboardSummary,
+  mapDashboardSummaryToStats,
   ApiResultSummaryResponse,
   ApiTimelineResponse,
   mapApiCustomerDetailToProfile,
@@ -75,18 +77,13 @@ async function getDashboardStats(fallbackStats: StatItem[]): Promise<StatItem[]>
 
 export async function getHomeDashboard(): Promise<HomeDashboardData> {
   try {
-    const [leadsResponse, apiStats] = await Promise.all([
-      apiGet<ApiLeadListResponse>("/leads"),
-      getDashboardStats(homeStats),
-    ]);
-
-    const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
+    const summary = await apiGet<ApiDashboardSummary>("/dashboard/summary");
 
     return {
-      stats: apiStats.length > 0 ? apiStats : homeStats,
-      tasks: homeTasks,
-      priorityLeads: apiLeads.length > 0 ? apiLeads : homePriorityLeads,
-      risks: homeRisks,
+      stats: mapDashboardSummaryToStats(summary),
+      tasks: [],
+      priorityLeads: [],
+      risks: [],
     };
   } catch {
     return {

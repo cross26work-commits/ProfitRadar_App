@@ -174,3 +174,48 @@ export type ApiResultInsightsResponse = {
   items: string[];
   message: string;
 };
+
+/* ===========================
+   Dashboard Summary
+=========================== */
+
+export type ApiDashboardSummary = {
+  company_id: string;
+  metrics: {
+    estimated_profit: number;
+    actual_profit: number;
+    recoverable_profit: number;
+    customer_count: number;
+    open_event_count: number;
+    hot_lead_count: number;
+  };
+  top_actions: unknown[];
+  recent_timeline: unknown[];
+};
+
+export function mapDashboardSummaryToStats(
+  summary: ApiDashboardSummary,
+): StatItem[] {
+  return [
+    {
+      label: "今日の利益",
+      value: formatYen(summary.metrics.actual_profit),
+      sub: "実利益",
+    },
+    {
+      label: "見込利益",
+      value: formatYen(summary.metrics.estimated_profit),
+      sub: "AI分析",
+    },
+    {
+      label: "回収可能",
+      value: formatYen(summary.metrics.recoverable_profit),
+      sub: "未回収",
+    },
+    {
+      label: "顧客",
+      value: `${summary.metrics.customer_count}件`,
+      sub: "管理中",
+    },
+  ];
+}
