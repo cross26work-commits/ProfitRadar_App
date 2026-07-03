@@ -1,10 +1,16 @@
 from app.engines.revenue_engine import analyze_email
 from app.repositories.profit_event_repository import ProfitEventRepository
+from app.services.event_service import EventService
 
 
 class RevenueService:
-    def __init__(self, repository: ProfitEventRepository | None = None):
+    def __init__(
+        self,
+        repository: ProfitEventRepository | None = None,
+        event_service: EventService | None = None,
+    ):
         self.repository = repository
+        self.event_service = event_service
 
     def analyze(self, company_id: str, payload: dict):
         if not company_id:
@@ -43,6 +49,7 @@ class RevenueService:
                 **analysis,
                 "saved": False,
                 "profit_event": None,
+                "events": None,
             }
 
         profit_event = self.repository.create_profit_event(
@@ -61,8 +68,16 @@ class RevenueService:
             },
         )
 
+        events = None
+        if self.event_service:
+            events = self.event_service.profit_detected(
+                company_id=company_id,
+                profit_event=profit_event,
+            )
+
         return {
             **analysis,
             "saved": True,
             "profit_event": profit_event,
+            "events": events,
         }
