@@ -1,4 +1,4 @@
-from app.providers.ai_provider import get_ai_provider
+from app.engines.revenue_engine import analyze_email
 
 
 class RevenueService:
@@ -6,11 +6,23 @@ class RevenueService:
         if not company_id:
             raise ValueError("company_id is required")
 
-        ai = get_ai_provider()
-        judgement = ai.judge_sales_opportunity(payload)
+        subject = payload.get("subject", "")
+        body = payload.get("body", "") or payload.get("content", "")
+        neglected_days = int(payload.get("neglected_days") or 7)
+
+        result = analyze_email(
+            subject=subject,
+            body=body,
+            neglected_days=neglected_days,
+        )
 
         return {
             "company_id": company_id,
-            "estimated_profit": payload.get("estimated_profit", 0),
-            "judgement": judgement,
+            "engine": "revenue_engine",
+            "input": {
+                "subject": subject,
+                "body": body,
+                "neglected_days": neglected_days,
+            },
+            "result": result,
         }
