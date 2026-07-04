@@ -70,7 +70,11 @@ def _enrich_events(
                 "id": latest.get("id"),
                 "type": latest.get("type") or latest.get("event_type"),
                 "title": latest.get("title"),
-                "body": latest.get("body") or latest.get("content"),
+                "body": (
+                    latest.get("description")
+                    or latest.get("body")
+                    or latest.get("content")
+                ),
                 "created_at": latest.get("created_at"),
             }
         else:

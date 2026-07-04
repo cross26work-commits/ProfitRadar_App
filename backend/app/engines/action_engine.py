@@ -85,13 +85,15 @@ def build_action_reason(event: dict, judgement: dict | None = None) -> str:
 
 
 def build_next_action(event: dict, judgement: dict | None = None) -> str:
+    # profit_events は Gmail返信解析後に最新状態へ更新されるため最優先
+    if event.get("next_action"):
+        return str(event["next_action"])
+
+    # event側に値がない場合のみAI判定を使用
     if judgement:
         for key in ["next_action", "recommended_action", "action"]:
             if judgement.get(key):
                 return str(judgement[key])
-
-    if event.get("next_action"):
-        return str(event["next_action"])
 
     category = str(event.get("category") or "")
 
@@ -133,7 +135,7 @@ def generate_top_actions(events: list[dict], judgements: list[dict] | None = Non
 
     for j in judgements or []:
         event_id = j.get("profit_event_id") or j.get("event_id")
-        if event_id:
+        if event_id and event_id not in judgement_map:
             judgement_map[event_id] = j
 
     actions = []
