@@ -106,7 +106,7 @@ def run_self_evaluation(
         })
 
     if not evaluated:
-        message = "評価対象の実利益データはまだありません。"
+        message = "新たに自己評価する案件はありません。"
     else:
         avg_accuracy = round(
             sum(item["accuracy"] for item in evaluated) / len(evaluated),
