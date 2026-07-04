@@ -28,6 +28,7 @@ def run_self_evaluation(
         db.table("ai_judgements")
         .select("*")
         .eq("company_id", x_company_id)
+        .order("created_at", desc=True)
         .execute()
     )
 
@@ -48,6 +49,19 @@ def run_self_evaluation(
         judgement = judgement_map.get(event.get("id"))
 
         if actual_profit <= 0:
+            continue
+
+        exists = (
+            db.table("learning_logs")
+            .select("id")
+            .eq("company_id", x_company_id)
+            .eq("profit_event_id", event.get("id"))
+            .eq("event_type", "ai_self_evaluation")
+            .limit(1)
+            .execute()
+        )
+
+        if exists.data:
             continue
 
         diff = actual_profit - estimated_profit

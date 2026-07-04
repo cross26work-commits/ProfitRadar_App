@@ -36,6 +36,40 @@ def update_actual_profit(
 
     event = rows[0]
 
+    # Phase6-6:
+    # 実利益更新後、顧客単位の推定利益・実利益を再集計
+    customer_id = event.get("customer_id")
+
+    if customer_id:
+        related_events = (
+            db.table("profit_events")
+            .select("estimated_profit,actual_profit")
+            .eq("company_id", x_company_id)
+            .eq("customer_id", customer_id)
+            .execute()
+        )
+
+        customer_events = related_events.data or []
+
+        total_estimated_profit = sum(
+            int(row.get("estimated_profit") or 0)
+            for row in customer_events
+        )
+
+        total_actual_profit = sum(
+            int(row.get("actual_profit") or 0)
+            for row in customer_events
+        )
+
+        db.table("customers").update({
+            "total_estimated_profit": total_estimated_profit,
+            "total_actual_profit": total_actual_profit,
+        }).eq(
+            "company_id", x_company_id
+        ).eq(
+            "id", customer_id
+        ).execute()
+
     timeline_payload = {
         "company_id": x_company_id,
         "customer_id": event.get("customer_id"),
