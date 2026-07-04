@@ -220,6 +220,15 @@ def send_reply_mock(
         .execute()
     )
 
+    gmail_message_id = gmail_result.get("id")
+    gmail_thread_id = gmail_result.get("threadId")
+
+    if gmail_thread_id:
+        db.table("profit_events").update({
+            "gmail_thread_id": gmail_thread_id,
+            "last_gmail_message_id": gmail_message_id,
+        }).eq("company_id", x_company_id).eq("id", event_id).execute()
+
     timeline_payload = {
         "company_id": x_company_id,
         "customer_id": customer_id,
@@ -233,6 +242,8 @@ def send_reply_mock(
             "mode": "gmail",
             "subject": subject,
             "to_email": to_email,
+            "gmail_message_id": gmail_message_id,
+            "gmail_thread_id": gmail_thread_id,
         },
     }
 
@@ -249,6 +260,8 @@ def send_reply_mock(
             "subject": subject,
             "to_email": to_email,
             "mode": "gmail",
+            "gmail_message_id": gmail_message_id,
+            "gmail_thread_id": gmail_thread_id,
         },
         "success": True,
         "actual_profit": 0,

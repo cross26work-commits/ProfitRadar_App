@@ -3,6 +3,8 @@ import traceback
 
 from fastapi import APIRouter, Header, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.services.ai_judge_service import AIJudgeService
+from app.repositories.ai_judgement_repository import AIJudgementRepository
 from google_auth_oauthlib.flow import Flow
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
@@ -175,6 +177,7 @@ def gmail_callback(
 
 
 import base64
+from email.utils import parseaddr
 from email.message import EmailMessage
 
 from google.oauth2.credentials import Credentials
@@ -246,4 +249,246 @@ def gmail_send_test(
         "to_email": to_email,
         "subject": subject,
         "gmail_result": sent,
+    }
+
+
+def _extract_header(headers: list[dict], name: str) -> str:
+    for header in headers:
+        if header.get("name", "").lower() == name.lower():
+            return header.get("value", "")
+    return ""
+
+
+def _extract_text_from_payload(payload: dict) -> str:
+    import base64
+
+    def decode_body(data: str) -> str:
+        if not data:
+            return ""
+        try:
+            decoded = base64.urlsafe_b64decode(data + "===")
+            return decoded.decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
+
+    if payload.get("body", {}).get("data"):
+        return decode_body(payload["body"]["data"])
+
+    for part in payload.get("parts", []) or []:
+        mime_type = part.get("mimeType", "")
+        if mime_type == "text/plain" and part.get("body", {}).get("data"):
+            return decode_body(part["body"]["data"])
+
+    return ""
+
+
+@router.post("/check-replies")
+def gmail_check_replies(
+    payload: dict | None = None,
+    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+):
+    db = get_supabase_client()
+
+    conn_res = (
+        db.table("gmail_connections")
+        .select("*")
+        .eq("company_id", x_company_id)
+        .eq("status", "connected")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    rows = conn_res.data or []
+    if not rows:
+        raise HTTPException(status_code=400, detail="Gmail is not connected")
+
+    token_json = rows[0].get("token_json") or {}
+
+    credentials = Credentials(
+        token=token_json.get("token"),
+        refresh_token=token_json.get("refresh_token"),
+        token_uri=token_json.get("token_uri"),
+        client_id=token_json.get("client_id"),
+        client_secret=token_json.get("client_secret"),
+        scopes=token_json.get("scopes"),
+    )
+
+    service = build("gmail", "v1", credentials=credentials)
+
+    max_events = int((payload or {}).get("max_events") or 50)
+
+    connected_email = rows[0].get("email") or ""
+    own_email = parseaddr(connected_email)[1].lower()
+
+    events_res = (
+        db.table("profit_events")
+        .select("*")
+        .eq("company_id", x_company_id)
+        .not_.is_("gmail_thread_id", "null")
+        .limit(max_events)
+        .execute()
+    )
+
+    events = events_res.data or []
+    detected = []
+
+    for event in events:
+        event_id = event.get("id")
+        customer_id = event.get("customer_id")
+        thread_id = event.get("gmail_thread_id")
+
+        if not thread_id:
+            continue
+
+        thread = (
+            service.users()
+            .threads()
+            .get(
+                userId="me",
+                id=thread_id,
+                format="full",
+            )
+            .execute()
+        )
+
+        messages = thread.get("messages", []) or []
+
+        for detail in messages:
+            message_id = detail.get("id")
+            payload_data = detail.get("payload") or {}
+            headers = payload_data.get("headers") or []
+
+            from_raw = _extract_header(headers, "From")
+            from_email = parseaddr(from_raw)[1].lower()
+            subject = _extract_header(headers, "Subject")
+            date = _extract_header(headers, "Date")
+            body = _extract_text_from_payload(payload_data)
+
+            if not message_id:
+                continue
+
+            label_ids = detail.get("labelIds", []) or []
+            last_sent_message_id = event.get("last_gmail_message_id")
+
+            # 自分が送ったメールは除外
+            # 1. Gmail SENTラベル
+            # 2. 送信時に保存したlast_gmail_message_id
+            # 3. Gmail接続emailとFrom一致
+            if "SENT" in label_ids:
+                continue
+
+            if last_sent_message_id and message_id == last_sent_message_id:
+                continue
+
+            if own_email and from_email == own_email:
+                continue
+
+            exists = (
+                db.table("reply_logs")
+                .select("id")
+                .eq("company_id", x_company_id)
+                .or_(f"external_id.eq.{message_id},gmail_message_id.eq.{message_id}")
+                .limit(1)
+                .execute()
+            )
+
+            if exists.data:
+                continue
+
+            reply_payload = {
+                "company_id": x_company_id,
+                "customer_id": customer_id,
+                "profit_event_id": event_id,
+                "channel": "gmail",
+                "reply_body": body[:5000],
+                "reply_at": None,
+                "external_id": message_id,
+                "thread_id": thread_id,
+                "gmail_thread_id": thread_id,
+                "gmail_message_id": message_id,
+            }
+
+            reply_log = db.table("reply_logs").insert(reply_payload).execute()
+
+            timeline_payload = {
+                "company_id": x_company_id,
+                "customer_id": customer_id,
+                "profit_event_id": event_id,
+                "event_type": "gmail_reply_detected",
+                "channel": "gmail",
+                "title": "Gmail返信を検知",
+                "description": f"{from_raw} / {subject}\n{body[:500]}",
+                "amount": 0,
+                "metadata": {
+                    "gmail_message_id": message_id,
+                    "gmail_thread_id": thread_id,
+                    "from": from_raw,
+                    "from_email": from_email,
+                    "subject": subject,
+                    "date": date,
+                },
+            }
+
+            timeline = db.table("timeline").insert(timeline_payload).execute()
+
+            ai_result = None
+            try:
+                ai_service = AIJudgeService(
+                    repository=AIJudgementRepository(db=db)
+                )
+                ai_result = ai_service.judge_and_save(
+                    company_id=x_company_id,
+                    payload={
+                        "customer_id": customer_id,
+                        "profit_event_id": event_id,
+                        "subject": subject,
+                        "sender": from_raw,
+                        "body": body,
+                        "score": event.get("opportunity_score") or 0,
+                    },
+                )
+
+                judgement_result = ai_result.get("result") or {}
+
+                update_payload = {
+                    "last_gmail_message_id": message_id,
+                    "risk_level": judgement_result.get("risk_level") or event.get("risk_level"),
+                    "next_action": judgement_result.get("next_action") or event.get("next_action"),
+                }
+
+                if judgement_result.get("opportunity_score") is not None:
+                    update_payload["opportunity_score"] = judgement_result.get("opportunity_score")
+
+                db.table("profit_events").update(update_payload).eq("company_id", x_company_id).eq("id", event_id).execute()
+
+            except Exception as e:
+                ai_result = {
+                    "saved": False,
+                    "error": str(e),
+                }
+                db.table("profit_events").update({
+                    "last_gmail_message_id": message_id,
+                }).eq("company_id", x_company_id).eq("id", event_id).execute()
+
+            detected.append({
+                "profit_event_id": event_id,
+                "customer_id": customer_id,
+                "message_id": message_id,
+                "thread_id": thread_id,
+                "from": from_raw,
+                "subject": subject,
+                "date": date,
+                "body": body[:1000],
+                "reply_log": (reply_log.data or [None])[0],
+                "timeline_event": (timeline.data or [None])[0],
+                "ai_result": ai_result,
+            })
+
+    return {
+        "checked": True,
+        "mode": "thread_based",
+        "events_checked": len(events),
+        "count": len(detected),
+        "items": detected,
     }
