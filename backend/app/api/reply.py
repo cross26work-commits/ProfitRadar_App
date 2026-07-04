@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Header, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.services.customer_resolver_service import CustomerResolverService
+from app.repositories.customer_repository import CustomerRepository
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from email.message import EmailMessage
@@ -175,6 +177,24 @@ def send_reply_mock(
 
     if not customer_id:
         customer_id = event.get("customer_id")
+
+    # Phase6-6: 送信先メールアドレスから顧客を自動解決
+    if not customer_id and to_email:
+        resolver = CustomerResolverService(
+            repository=CustomerRepository(db=db)
+        )
+        customer = resolver.resolve(
+            company_id=x_company_id,
+            payload={
+                "email": to_email,
+                "name": to_email,
+            },
+        )
+        if customer:
+            customer_id = customer.get("id")
+            db.table("profit_events").update({
+                "customer_id": customer_id,
+            }).eq("company_id", x_company_id).eq("id", event_id).execute()
 
     conn = (
         db.table("gmail_connections")

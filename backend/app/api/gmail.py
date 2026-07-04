@@ -5,6 +5,8 @@ from fastapi import APIRouter, Header, HTTPException
 from app.core.supabase_client import get_supabase_client
 from app.services.ai_judge_service import AIJudgeService
 from app.repositories.ai_judgement_repository import AIJudgementRepository
+from app.services.customer_resolver_service import CustomerResolverService
+from app.repositories.customer_repository import CustomerRepository
 from app.engines.sales_temperature import build_sales_update
 from google_auth_oauthlib.flow import Flow
 
@@ -445,6 +447,35 @@ def gmail_check_replies(
             if exists.data:
                 continue
 
+            # Phase6-6: 外部返信メールアドレスから顧客を自動解決
+            customer_id = event.get("customer_id")
+
+            if not customer_id and from_email:
+                resolver = CustomerResolverService(
+                    repository=CustomerRepository(db=db)
+                )
+
+                customer = resolver.resolve(
+                    company_id=x_company_id,
+                    payload={
+                        "email": from_email,
+                        "sender": from_raw,
+                    },
+                )
+
+                if customer:
+                    customer_id = customer.get("id")
+
+                    db.table("profit_events").update({
+                        "customer_id": customer_id,
+                    }).eq(
+                        "company_id", x_company_id
+                    ).eq(
+                        "id", event.get("id")
+                    ).execute()
+
+                    event["customer_id"] = customer_id
+
             reply_payload = {
                 "company_id": x_company_id,
                 "customer_id": customer_id,
@@ -480,6 +511,31 @@ def gmail_check_replies(
             }
 
             timeline = db.table("timeline").insert(timeline_payload).execute()
+
+            if customer_id:
+                related_events = (
+                    db.table("profit_events")
+                    .select("estimated_profit,actual_profit")
+                    .eq("company_id", x_company_id)
+                    .eq("customer_id", customer_id)
+                    .execute()
+                )
+
+                total_estimated_profit = sum(
+                    int(row.get("estimated_profit") or 0)
+                    for row in (related_events.data or [])
+                )
+
+                total_actual_profit = sum(
+                    int(row.get("actual_profit") or 0)
+                    for row in (related_events.data or [])
+                )
+
+                db.table("customers").update({
+                    "total_estimated_profit": total_estimated_profit,
+                    "total_actual_profit": total_actual_profit,
+                    "last_contact_at": date,
+                }).eq("company_id", x_company_id).eq("id", customer_id).execute()
 
             ai_result = None
             try:
