@@ -5,6 +5,7 @@ from fastapi import APIRouter, Header, HTTPException
 from app.core.supabase_client import get_supabase_client
 from app.services.ai_judge_service import AIJudgeService
 from app.repositories.ai_judgement_repository import AIJudgementRepository
+from app.engines.sales_temperature import build_sales_update
 from google_auth_oauthlib.flow import Flow
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
@@ -453,12 +454,8 @@ def gmail_check_replies(
 
                 update_payload = {
                     "last_gmail_message_id": message_id,
-                    "risk_level": judgement_result.get("risk_level") or event.get("risk_level"),
-                    "next_action": judgement_result.get("next_action") or event.get("next_action"),
+                    **build_sales_update(judgement_result, event),
                 }
-
-                if judgement_result.get("opportunity_score") is not None:
-                    update_payload["opportunity_score"] = judgement_result.get("opportunity_score")
 
                 db.table("profit_events").update(update_payload).eq("company_id", x_company_id).eq("id", event_id).execute()
 
