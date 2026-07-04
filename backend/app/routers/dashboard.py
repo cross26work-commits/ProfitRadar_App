@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from postgrest.exceptions import APIError
 
 from app.core.supabase_client import SupabaseConfigError, get_supabase_client
@@ -17,11 +17,13 @@ def get_service() -> DashboardService:
 
 @router.get("/summary")
 def dashboard_summary(
+    company_id: str | None = Query(default=None),
     x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
 ):
+    resolved_company_id = company_id or x_company_id
     service = get_service()
 
     try:
-        return service.get_summary(company_id=x_company_id)
+        return service.get_summary(company_id=resolved_company_id)
     except APIError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
