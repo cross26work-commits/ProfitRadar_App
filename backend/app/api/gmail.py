@@ -283,6 +283,53 @@ def _extract_text_from_payload(payload: dict) -> str:
     return ""
 
 
+def _strip_quoted_reply(text: str) -> str:
+    """
+    Gmail返信本文から、過去メール引用・署名・転送引用を除去する。
+    AI解析には最新返信だけを渡す。
+    """
+    if not text:
+        return ""
+
+    markers = [
+        "\nOn ",
+        "\r\nOn ",
+        "\n202",
+        "\r\n202",
+        "\n20",
+        "\r\n20",
+        "\n>",
+        "\r\n>",
+        "\n-----Original Message-----",
+        "\r\n-----Original Message-----",
+        "\n転送されたメッセージ",
+        "\r\n転送されたメッセージ",
+    ]
+
+    cut = len(text)
+    for marker in markers:
+        idx = text.find(marker)
+        if idx != -1:
+            cut = min(cut, idx)
+
+    cleaned = text[:cut].strip()
+
+    signature_markers = [
+        "\n-- ",
+        "\r\n-- ",
+        "\nSent from my iPhone",
+        "\r\nSent from my iPhone",
+    ]
+
+    cut = len(cleaned)
+    for marker in signature_markers:
+        idx = cleaned.find(marker)
+        if idx != -1:
+            cut = min(cut, idx)
+
+    return cleaned[:cut].strip()
+
+
 @router.post("/check-replies")
 def gmail_check_replies(
     payload: dict | None = None,
@@ -365,6 +412,7 @@ def gmail_check_replies(
             subject = _extract_header(headers, "Subject")
             date = _extract_header(headers, "Date")
             body = _extract_text_from_payload(payload_data)
+            clean_body = _strip_quoted_reply(body) or body
 
             if not message_id:
                 continue
@@ -402,7 +450,7 @@ def gmail_check_replies(
                 "customer_id": customer_id,
                 "profit_event_id": event_id,
                 "channel": "gmail",
-                "reply_body": body[:5000],
+                "reply_body": clean_body[:5000],
                 "reply_at": None,
                 "external_id": message_id,
                 "thread_id": thread_id,
@@ -419,7 +467,7 @@ def gmail_check_replies(
                 "event_type": "gmail_reply_detected",
                 "channel": "gmail",
                 "title": "Gmail返信を検知",
-                "description": f"{from_raw} / {subject}\n{body[:500]}",
+                "description": f"{from_raw} / {subject}\n{clean_body[:500]}",
                 "amount": 0,
                 "metadata": {
                     "gmail_message_id": message_id,
@@ -445,7 +493,7 @@ def gmail_check_replies(
                         "profit_event_id": event_id,
                         "subject": subject,
                         "sender": from_raw,
-                        "body": body,
+                        "body": clean_body,
                         "score": event.get("opportunity_score") or 0,
                     },
                 )
@@ -476,7 +524,7 @@ def gmail_check_replies(
                 "from": from_raw,
                 "subject": subject,
                 "date": date,
-                "body": body[:1000],
+                "body": clean_body[:1000],
                 "reply_log": (reply_log.data or [None])[0],
                 "timeline_event": (timeline.data or [None])[0],
                 "ai_result": ai_result,
