@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/results", tags=["results"])
 
@@ -13,14 +14,14 @@ def _num(value):
 
 @router.get("/summary")
 def results_summary(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .execute()
     )
 
@@ -45,14 +46,14 @@ def results_summary(
 
 @router.get("/insights")
 def results_insights(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .execute()
     )
 

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/sales-forecast", tags=["sales-forecast"])
 
@@ -13,14 +14,14 @@ def _num(value):
 
 @router.get("/summary")
 def sales_forecast_summary(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .execute()
     )
 
@@ -50,7 +51,7 @@ def sales_forecast_summary(
     aggressive_forecast = actual_profit + int(hot_open_profit * 0.8)
 
     return {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "actual_profit": actual_profit,
         "estimated_profit": estimated_profit,
         "open_profit": open_profit,
