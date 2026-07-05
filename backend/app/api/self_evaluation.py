@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/self-evaluation", tags=["self-evaluation"])
 
@@ -13,21 +14,21 @@ def _num(value):
 
 @router.post("/run")
 def run_self_evaluation(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     events_res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .execute()
     )
 
     judgements_res = (
         db.table("ai_judgements")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .order("created_at", desc=True)
         .execute()
     )
@@ -54,7 +55,7 @@ def run_self_evaluation(
         exists = (
             db.table("learning_logs")
             .select("id")
-            .eq("company_id", x_company_id)
+            .eq("company_id", company_id)
             .eq("profit_event_id", event.get("id"))
             .eq("event_type", "ai_self_evaluation")
             .limit(1)
@@ -74,7 +75,7 @@ def run_self_evaluation(
         success = actual_profit > 0
 
         learning_payload = {
-            "company_id": x_company_id,
+            "company_id": company_id,
             "customer_id": event.get("customer_id"),
             "profit_event_id": event.get("id"),
             "event_type": "ai_self_evaluation",
@@ -115,7 +116,7 @@ def run_self_evaluation(
         message = f"AI自己評価を{len(evaluated)}件実行しました。平均精度は{avg_accuracy}%です。"
 
     return {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "count": len(evaluated),
         "items": evaluated,
         "message": message,
@@ -124,14 +125,14 @@ def run_self_evaluation(
 
 @router.get("/summary")
 def self_evaluation_summary(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("learning_logs")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("event_type", "ai_self_evaluation")
         .order("created_at", desc=True)
         .limit(50)
@@ -153,7 +154,7 @@ def self_evaluation_summary(
     avg_accuracy = round(sum(accuracies) / len(accuracies), 1) if accuracies else 0
 
     return {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "count": len(rows),
         "success_count": success_count,
         "avg_accuracy": avg_accuracy,
