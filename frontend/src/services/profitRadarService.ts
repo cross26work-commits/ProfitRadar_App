@@ -1,6 +1,5 @@
 import type { Customer, CustomerProfile, Lead, LeadDetail, StatItem, Task, Timeline } from "@/types/profit-radar";
 import { apiGet } from "@/lib/api";
-import { homePriorityLeads, homeRisks, homeStats, homeTasks } from "@/data/mock/home";
 import { replyLeads, replyStats } from "@/data/mock/reply";
 import {
   customerDetailLeads,
@@ -151,14 +150,8 @@ async function getDashboardStats(fallbackStats: StatItem[]): Promise<StatItem[]>
 }
 
 export async function getHomeDashboard(): Promise<HomeDashboardData> {
-  const companyId =
-    process.env.NEXT_PUBLIC_DEMO_COMPANY_ID ??
-    "517a5d5a-3488-4ece-91be-99034929143a";
-
   try {
-    const home = await apiGet<ApiDashboardHomeResponse>(
-      `/dashboard/home?company_id=${companyId}`,
-    );
+    const home = await apiGet<ApiDashboardHomeResponse>("/dashboard/home");
 
     return {
       stats: [
@@ -189,25 +182,15 @@ export async function getHomeDashboard(): Promise<HomeDashboardData> {
         `${risk.customer_name || "顧客未設定"}：${risk.title} / ${risk.risk_level} / ${risk.next_action}`,
       ),
     };
-  } catch {
-    return {
-      stats: homeStats,
-      tasks: homeTasks,
-      priorityLeads: homePriorityLeads,
-      risks: homeRisks,
-    };
+  } catch (error) {
+    console.error("getHomeDashboard API failed:", error);
+    throw error;
   }
 }
 
 export async function getReplyDashboard(): Promise<ReplyDashboardData> {
-  const companyId =
-    process.env.NEXT_PUBLIC_DEMO_COMPANY_ID ??
-    "517a5d5a-3488-4ece-91be-99034929143a";
-
   try {
-    const home = await apiGet<ApiDashboardHomeResponse>(
-      `/dashboard/home?company_id=${companyId}`,
-    );
+    const home = await apiGet<ApiDashboardHomeResponse>("/dashboard/home");
 
     return {
       stats: [

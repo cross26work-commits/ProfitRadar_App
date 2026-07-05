@@ -1,13 +1,57 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { AIAdviceCard } from "@/components/business/AIAdviceCard";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
 import { DashboardOverviewSection } from "@/components/sections/DashboardOverviewSection";
 import { DangerLeadSection } from "@/components/sections/DangerLeadSection";
 import { PageStack } from "@/components/sections/PageStack";
 import { ReplyQueueSection } from "@/components/sections/ReplyQueueSection";
-import { getHomeDashboard } from "@/services/profitRadarService";
+import {
+  getHomeDashboard,
+  type HomeDashboardData,
+} from "@/services/profitRadarService";
 
-export default async function HomePage() {
-  const dashboard = await getHomeDashboard();
+export default function HomePage() {
+  const [dashboard, setDashboard] = useState<HomeDashboardData | null>(null);
+  const [error, setError] = useState<string>("");
+
+  useEffect(() => {
+    getHomeDashboard()
+      .then(setDashboard)
+      .catch((err) => {
+        console.error("Dashboard load failed:", err);
+        setError(err instanceof Error ? err.message : "Dashboard load failed");
+      });
+  }, []);
+
+  if (error) {
+    return (
+      <PageStack>
+        <DashboardHeroSection
+          title="今日の利益"
+          description="Dashboard APIの接続に失敗しました。"
+        />
+        <pre className="whitespace-pre-wrap rounded-3xl border border-red-200 bg-red-50 p-6 text-sm font-bold text-red-700">
+          {error}
+        </pre>
+      </PageStack>
+    );
+  }
+
+  if (!dashboard) {
+    return (
+      <PageStack>
+        <DashboardHeroSection
+          title="今日の利益"
+          description="利益・今日やること・返信優先案件を確認します。"
+        />
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm font-bold text-slate-500">
+          Dashboardを読み込み中...
+        </div>
+      </PageStack>
+    );
+  }
 
   return (
     <PageStack>
