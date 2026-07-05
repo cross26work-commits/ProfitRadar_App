@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -13,14 +14,14 @@ def _yen(value):
 
 @router.get("")
 def list_customers(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     customers_res = (
         db.table("customers")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .order("updated_at", desc=True)
         .limit(100)
         .execute()
@@ -29,7 +30,7 @@ def list_customers(
     events_res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .execute()
     )
 
@@ -66,14 +67,14 @@ def list_customers(
 @router.get("/{customer_id}")
 def get_customer(
     customer_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("customers")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("id", customer_id)
         .limit(1)
         .execute()
@@ -98,14 +99,14 @@ def get_customer(
 @router.get("/{customer_id}/leads")
 def get_customer_leads(
     customer_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("customer_id", customer_id)
         .order("created_at", desc=True)
         .limit(50)
@@ -136,14 +137,14 @@ def get_customer_leads(
 @router.get("/{customer_id}/timeline")
 def get_customer_timeline(
     customer_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("timeline")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("customer_id", customer_id)
         .order("created_at", desc=True)
         .limit(30)

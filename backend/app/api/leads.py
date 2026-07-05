@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -13,14 +14,14 @@ def _yen(value):
 
 @router.get("")
 def list_leads(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .order("created_at", desc=True)
         .limit(50)
         .execute()
@@ -51,14 +52,14 @@ def list_leads(
 @router.get("/{lead_id}")
 def get_lead(
     lead_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("id", lead_id)
         .limit(1)
         .execute()
@@ -77,7 +78,7 @@ def get_lead(
         customer_res = (
             db.table("customers")
             .select("*")
-            .eq("company_id", x_company_id)
+            .eq("company_id", company_id)
             .eq("id", customer_id)
             .limit(1)
             .execute()
@@ -96,7 +97,7 @@ def get_lead(
     judge_res = (
         db.table("ai_judgements")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("profit_event_id", lead_id)
         .order("created_at", desc=True)
         .limit(1)
@@ -124,14 +125,14 @@ def get_lead(
 @router.get("/{lead_id}/timeline")
 def get_lead_timeline(
     lead_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     res = (
         db.table("timeline")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("profit_event_id", lead_id)
         .order("created_at", desc=True)
         .limit(30)
