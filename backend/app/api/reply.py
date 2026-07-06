@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 from app.services.customer_resolver_service import CustomerResolverService
 from app.repositories.customer_repository import CustomerRepository
 from google.oauth2.credentials import Credentials
@@ -13,14 +14,14 @@ router = APIRouter(prefix="/reply", tags=["reply"])
 @router.get("/{event_id}/draft")
 def build_reply_draft(
     event_id: str,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     event_res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("id", event_id)
         .limit(1)
         .execute()
@@ -37,7 +38,7 @@ def build_reply_draft(
         customer_res = (
             db.table("customers")
             .select("*")
-            .eq("company_id", x_company_id)
+            .eq("company_id", company_id)
             .eq("id", event.get("customer_id"))
             .limit(1)
             .execute()
@@ -48,7 +49,7 @@ def build_reply_draft(
     judgement_res = (
         db.table("ai_judgements")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("profit_event_id", event_id)
         .order("created_at", desc=True)
         .limit(1)
@@ -80,7 +81,7 @@ def build_reply_draft(
     )
 
     return {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "event_id": event_id,
         "customer": customer,
         "event": event,
@@ -93,7 +94,7 @@ def build_reply_draft(
 def save_reply_draft(
     event_id: str,
     payload: dict,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
@@ -101,9 +102,25 @@ def save_reply_draft(
     if not body:
         raise HTTPException(status_code=400, detail="body is required")
 
+    event_res = (
+        db.table("profit_events")
+        .select("*")
+        .eq("company_id", company_id)
+        .eq("id", event_id)
+        .limit(1)
+        .execute()
+    )
+
+    events = event_res.data or []
+    if not events:
+        raise HTTPException(status_code=404, detail="profit event not found")
+
+    event = events[0]
+    customer_id = event.get("customer_id")
+
     timeline_payload = {
-        "company_id": x_company_id,
-        "customer_id": payload.get("customer_id"),
+        "company_id": company_id,
+        "customer_id": customer_id,
         "profit_event_id": event_id,
         "event_type": "reply_draft_saved",
         "channel": "system",
@@ -118,8 +135,8 @@ def save_reply_draft(
     timeline = db.table("timeline").insert(timeline_payload).execute()
 
     learning_payload = {
-        "company_id": x_company_id,
-        "customer_id": payload.get("customer_id"),
+        "company_id": company_id,
+        "customer_id": customer_id,
         "profit_event_id": event_id,
         "event_type": "reply_draft_saved",
         "input_data": payload,
@@ -136,7 +153,6 @@ def save_reply_draft(
         "saved": True,
         "timeline_event": (timeline.data or [None])[0],
         "learning_event": (learning.data or [None])[0],
-        "gmail_result": gmail_result,
     }
 
 
@@ -144,7 +160,7 @@ def save_reply_draft(
 def send_reply_mock(
     event_id: str,
     payload: dict,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     """
     Phase6-1: Gmail本接続前の安全な疑似送信API。
@@ -163,7 +179,7 @@ def send_reply_mock(
     event_res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("id", event_id)
         .limit(1)
         .execute()
@@ -184,7 +200,7 @@ def send_reply_mock(
             repository=CustomerRepository(db=db)
         )
         customer = resolver.resolve(
-            company_id=x_company_id,
+            company_id=company_id,
             payload={
                 "email": to_email,
                 "name": to_email,
@@ -194,12 +210,12 @@ def send_reply_mock(
             customer_id = customer.get("id")
             db.table("profit_events").update({
                 "customer_id": customer_id,
-            }).eq("company_id", x_company_id).eq("id", event_id).execute()
+            }).eq("company_id", company_id).eq("id", event_id).execute()
 
     conn = (
         db.table("gmail_connections")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("status", "connected")
         .limit(1)
         .execute()
@@ -247,10 +263,10 @@ def send_reply_mock(
         db.table("profit_events").update({
             "gmail_thread_id": gmail_thread_id,
             "last_gmail_message_id": gmail_message_id,
-        }).eq("company_id", x_company_id).eq("id", event_id).execute()
+        }).eq("company_id", company_id).eq("id", event_id).execute()
 
     timeline_payload = {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "customer_id": customer_id,
         "profit_event_id": event_id,
         "event_type": "reply_sent_gmail",
@@ -270,7 +286,7 @@ def send_reply_mock(
     timeline = db.table("timeline").insert(timeline_payload).execute()
 
     learning_payload = {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "customer_id": customer_id,
         "profit_event_id": event_id,
         "event_type": "reply_sent_gmail",

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 
 router = APIRouter(prefix="/profit-events", tags=["profit-events"])
 
@@ -8,7 +9,7 @@ router = APIRouter(prefix="/profit-events", tags=["profit-events"])
 def update_actual_profit(
     event_id: str,
     payload: dict,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
@@ -25,7 +26,7 @@ def update_actual_profit(
             "actual_profit": actual_profit,
             "status": status,
         })
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("id", event_id)
         .execute()
     )
@@ -44,7 +45,7 @@ def update_actual_profit(
         related_events = (
             db.table("profit_events")
             .select("estimated_profit,actual_profit")
-            .eq("company_id", x_company_id)
+            .eq("company_id", company_id)
             .eq("customer_id", customer_id)
             .execute()
         )
@@ -65,13 +66,13 @@ def update_actual_profit(
             "total_estimated_profit": total_estimated_profit,
             "total_actual_profit": total_actual_profit,
         }).eq(
-            "company_id", x_company_id
+            "company_id", company_id
         ).eq(
             "id", customer_id
         ).execute()
 
     timeline_payload = {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "customer_id": event.get("customer_id"),
         "profit_event_id": event.get("id"),
         "event_type": "actual_profit_saved",
@@ -88,7 +89,7 @@ def update_actual_profit(
     timeline = db.table("timeline").insert(timeline_payload).execute()
 
     learning_payload = {
-        "company_id": x_company_id,
+        "company_id": company_id,
         "customer_id": event.get("customer_id"),
         "profit_event_id": event.get("id"),
         "event_type": "actual_profit_saved",
