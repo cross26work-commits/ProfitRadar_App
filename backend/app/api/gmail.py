@@ -1,8 +1,12 @@
 import os
 import traceback
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Header, HTTPException
+from jose import JWTError, jwt
+
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import get_supabase_client
+from app.core.company_context import get_current_company_id
 from app.services.ai_judge_service import AIJudgeService
 from app.repositories.ai_judgement_repository import AIJudgementRepository
 from app.services.customer_resolver_service import CustomerResolverService
@@ -17,6 +21,70 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
 ]
+
+
+def _oauth_state_secret() -> str:
+    secret = (
+        os.getenv("OAUTH_STATE_SECRET")
+        or os.getenv("SUPABASE_JWT_SECRET")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    )
+
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="OAuth state secret is not configured",
+        )
+
+    return secret
+
+
+def _create_oauth_state(company_id: str) -> str:
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "company_id": company_id,
+        "purpose": "gmail_oauth",
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+
+    return jwt.encode(
+        payload,
+        _oauth_state_secret(),
+        algorithm="HS256",
+    )
+
+
+def _decode_oauth_state(state: str) -> str:
+    try:
+        payload = jwt.decode(
+            state,
+            _oauth_state_secret(),
+            algorithms=["HS256"],
+            options={"verify_aud": False},
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired OAuth state",
+        )
+
+    if payload.get("purpose") != "gmail_oauth":
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OAuth state purpose",
+        )
+
+    company_id = payload.get("company_id")
+
+    if not company_id:
+        raise HTTPException(
+            status_code=400,
+            detail="OAuth state company_id is missing",
+        )
+
+    return company_id
 
 
 def _client_config() -> dict:
@@ -47,16 +115,33 @@ def _client_config() -> dict:
 
 
 @router.get("/status")
-def gmail_status():
+def gmail_status(
+    company_id: str = Depends(get_current_company_id),
+):
+    db = get_supabase_client()
+
+    res = (
+        db.table("gmail_connections")
+        .select("id,email,status,created_at")
+        .eq("company_id", company_id)
+        .eq("status", "connected")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    rows = res.data or []
+
     return {
-        "connected": False,
-        "message": "gmail oauth api ready",
+        "connected": bool(rows),
+        "connection": rows[0] if rows else None,
+        "message": "gmail connection status loaded",
     }
 
 
 @router.get("/auth-url")
 def gmail_auth_url(
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     cfg = _client_config()
 
@@ -67,17 +152,19 @@ def gmail_auth_url(
         autogenerate_code_verifier=False,
     )
 
+    oauth_state = _create_oauth_state(company_id)
+
     auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
-        state=x_company_id,
+        state=oauth_state,
     )
 
     return {
         "auth_url": auth_url,
         "state": state,
-        "company_id": x_company_id,
+        "company_id": company_id,
         "scopes": SCOPES,
     }
 
@@ -89,6 +176,11 @@ def gmail_callback(
 ):
     if not code:
         raise HTTPException(status_code=400, detail="code is required")
+
+    if not state:
+        raise HTTPException(status_code=400, detail="state is required")
+
+    company_id = _decode_oauth_state(state)
 
     cfg = _client_config()
 
@@ -112,10 +204,6 @@ def gmail_callback(
         )
 
     credentials = flow.credentials
-
-    company_id = state
-    if not company_id:
-        raise HTTPException(status_code=400, detail="state/company_id is required")
 
     token_json = {
         "token": credentials.token,
@@ -190,14 +278,14 @@ from googleapiclient.discovery import build
 @router.post("/send-test")
 def gmail_send_test(
     payload: dict,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     conn_res = (
         db.table("gmail_connections")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("status", "connected")
         .order("created_at", desc=True)
         .limit(1)
@@ -335,14 +423,14 @@ def _strip_quoted_reply(text: str) -> str:
 @router.post("/check-replies")
 def gmail_check_replies(
     payload: dict | None = None,
-    x_company_id: str = Header(default="517a5d5a-3488-4ece-91be-99034929143a"),
+    company_id: str = Depends(get_current_company_id),
 ):
     db = get_supabase_client()
 
     conn_res = (
         db.table("gmail_connections")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .eq("status", "connected")
         .order("created_at", desc=True)
         .limit(1)
@@ -374,7 +462,7 @@ def gmail_check_replies(
     events_res = (
         db.table("profit_events")
         .select("*")
-        .eq("company_id", x_company_id)
+        .eq("company_id", company_id)
         .not_.is_("gmail_thread_id", "null")
         .limit(max_events)
         .execute()
@@ -438,7 +526,7 @@ def gmail_check_replies(
             exists = (
                 db.table("reply_logs")
                 .select("id")
-                .eq("company_id", x_company_id)
+                .eq("company_id", company_id)
                 .or_(f"external_id.eq.{message_id},gmail_message_id.eq.{message_id}")
                 .limit(1)
                 .execute()
@@ -456,7 +544,7 @@ def gmail_check_replies(
                 )
 
                 customer = resolver.resolve(
-                    company_id=x_company_id,
+                    company_id=company_id,
                     payload={
                         "email": from_email,
                         "sender": from_raw,
@@ -469,7 +557,7 @@ def gmail_check_replies(
                     db.table("profit_events").update({
                         "customer_id": customer_id,
                     }).eq(
-                        "company_id", x_company_id
+                        "company_id", company_id
                     ).eq(
                         "id", event.get("id")
                     ).execute()
@@ -477,7 +565,7 @@ def gmail_check_replies(
                     event["customer_id"] = customer_id
 
             reply_payload = {
-                "company_id": x_company_id,
+                "company_id": company_id,
                 "customer_id": customer_id,
                 "profit_event_id": event_id,
                 "channel": "gmail",
@@ -492,7 +580,7 @@ def gmail_check_replies(
             reply_log = db.table("reply_logs").insert(reply_payload).execute()
 
             timeline_payload = {
-                "company_id": x_company_id,
+                "company_id": company_id,
                 "customer_id": customer_id,
                 "profit_event_id": event_id,
                 "event_type": "gmail_reply_detected",
@@ -516,7 +604,7 @@ def gmail_check_replies(
                 related_events = (
                     db.table("profit_events")
                     .select("estimated_profit,actual_profit")
-                    .eq("company_id", x_company_id)
+                    .eq("company_id", company_id)
                     .eq("customer_id", customer_id)
                     .execute()
                 )
@@ -535,7 +623,7 @@ def gmail_check_replies(
                     "total_estimated_profit": total_estimated_profit,
                     "total_actual_profit": total_actual_profit,
                     "last_contact_at": date,
-                }).eq("company_id", x_company_id).eq("id", customer_id).execute()
+                }).eq("company_id", company_id).eq("id", customer_id).execute()
 
             ai_result = None
             try:
@@ -543,7 +631,7 @@ def gmail_check_replies(
                     repository=AIJudgementRepository(db=db)
                 )
                 ai_result = ai_service.judge_and_save(
-                    company_id=x_company_id,
+                    company_id=company_id,
                     payload={
                         "customer_id": customer_id,
                         "profit_event_id": event_id,
@@ -561,7 +649,7 @@ def gmail_check_replies(
                     **build_sales_update(judgement_result, event),
                 }
 
-                db.table("profit_events").update(update_payload).eq("company_id", x_company_id).eq("id", event_id).execute()
+                db.table("profit_events").update(update_payload).eq("company_id", company_id).eq("id", event_id).execute()
 
             except Exception as e:
                 ai_result = {
@@ -570,7 +658,7 @@ def gmail_check_replies(
                 }
                 db.table("profit_events").update({
                     "last_gmail_message_id": message_id,
-                }).eq("company_id", x_company_id).eq("id", event_id).execute()
+                }).eq("company_id", company_id).eq("id", event_id).execute()
 
             detected.append({
                 "profit_event_id": event_id,
