@@ -4,17 +4,11 @@ import { useEffect, useState } from "react";
 import { Textarea } from "@/components/forms/Textarea";
 import { ActionBar } from "@/components/ui/ActionBar";
 import { Button } from "@/components/ui/Button";
+import { apiGet, apiPost } from "@/lib/api";
 
 type ReplyDraftFormProps = {
   eventId: string | number;
 };
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-
-const COMPANY_ID =
-  process.env.NEXT_PUBLIC_DEMO_COMPANY_ID ??
-  "517a5d5a-3488-4ece-91be-99034929143a";
 
 export function ReplyDraftForm({ eventId }: ReplyDraftFormProps) {
   const [draft, setDraft] = useState("");
@@ -30,20 +24,9 @@ export function ReplyDraftForm({ eventId }: ReplyDraftFormProps) {
       setMessage("");
 
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/reply/${eventId}/draft`,
-          {
-            headers: {
-              "x-company-id": COMPANY_ID,
-            },
-          },
+        const data = await apiGet<{ draft?: string; event?: { customer_id?: string | null } }>(
+          `/reply/${eventId}/draft`,
         );
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-
-        const data = await response.json();
         setDraft(data.draft || "");
         setCustomerId(data.event?.customer_id ?? null);
       } catch (error) {
@@ -62,24 +45,10 @@ export function ReplyDraftForm({ eventId }: ReplyDraftFormProps) {
     setMessage("");
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/reply/${eventId}/save-draft`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-company-id": COMPANY_ID,
-          },
-          body: JSON.stringify({
-            customer_id: customerId,
-            body: draft,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      await apiPost(`/reply/${eventId}/save-draft`, {
+        customer_id: customerId,
+        body: draft,
+      });
 
       setMessage("返信下書きを保存しました。TimelineとLearningへ反映済みです。");
     } catch (error) {
@@ -95,26 +64,12 @@ export function ReplyDraftForm({ eventId }: ReplyDraftFormProps) {
     setMessage("");
 
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/reply/${eventId}/send`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-company-id": COMPANY_ID,
-          },
-          body: JSON.stringify({
-            customer_id: customerId,
-            to_email: "demo@example.com",
-            subject: "Profit Radar 返信",
-            body: draft,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      await apiPost(`/reply/${eventId}/send`, {
+        customer_id: customerId,
+        to_email: "demo@example.com",
+        subject: "Profit Radar 返信",
+        body: draft,
+      });
 
       setMessage("返信を疑似送信しました。TimelineとLearningへ反映済みです。");
     } catch (error) {

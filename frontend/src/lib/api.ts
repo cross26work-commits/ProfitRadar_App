@@ -51,6 +51,25 @@ export async function apiPost<T>(
   return response.json() as Promise<T>;
 }
 
+
+export async function apiPatch<T>(
+  path: string,
+  body: unknown,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: await createHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`API PATCH failed: ${path} ${response.status} ${errorText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export async function apiPut<T>(
   path: string,
   body: unknown,
