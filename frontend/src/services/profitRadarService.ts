@@ -1,15 +1,15 @@
-import type { Customer, CustomerProfile, Lead, LeadDetail, StatItem, Task, Timeline } from "@/types/profit-radar";
+import type {
+  Customer,
+  CustomerProfile,
+  Lead,
+  LeadDetail,
+  StatItem,
+  Task,
+  Timeline,
+} from "@/types/profit-radar";
+
 import { apiGet } from "@/lib/api";
-import { replyLeads, replyStats } from "@/data/mock/reply";
-import {
-  customerDetailLeads,
-  customerDetailStats,
-  customers,
-  customerStats,
-  customerTimeline,
-} from "@/data/mock/customers";
-import { leadDetailStats, leadTimeline } from "@/data/mock/leads";
-import { resultInsights, resultStats } from "@/data/mock/results";
+
 import {
   ApiCustomerDetailResponse,
   ApiCustomerListResponse,
@@ -138,15 +138,9 @@ export type ResultsDashboardData = {
   selfEvaluation: ApiSelfEvaluationSummaryResponse | null;
 };
 
-async function getDashboardStats(fallbackStats: StatItem[]): Promise<StatItem[]> {
-  try {
-    const response = await apiGet<ApiResultSummaryResponse>("/results/summary");
-    const apiStats = mapResultSummaryToStats(response);
-
-    return apiStats.length > 0 ? apiStats : fallbackStats;
-  } catch {
-    return fallbackStats;
-  }
+async function getDashboardStats(): Promise<StatItem[]> {
+  const response = await apiGet<ApiResultSummaryResponse>("/results/summary");
+  return mapResultSummaryToStats(response);
 }
 
 export async function getHomeDashboard(): Promise<HomeDashboardData> {
@@ -212,11 +206,9 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
       ],
       leads: home.reply_queue.map(mapActionToLead),
     };
-  } catch {
-    return {
-      stats: replyStats,
-      leads: replyLeads,
-    };
+  } catch (error) {
+    console.error("getReplyDashboard API failed:", error);
+    throw error;
   }
 }
 
@@ -224,20 +216,18 @@ export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
   try {
     const [customersResponse, apiStats] = await Promise.all([
       apiGet<ApiCustomerListResponse>("/customers"),
-      getDashboardStats(customerStats),
+      getDashboardStats(),
     ]);
 
     const apiCustomers = customersResponse.items.map(mapApiCustomerToCustomer);
 
     return {
-      stats: apiStats.length > 0 ? apiStats : customerStats,
-      customers: apiCustomers.length > 0 ? apiCustomers : customers,
+      stats: apiStats,
+      customers: apiCustomers,
     };
-  } catch {
-    return {
-      stats: customerStats,
-      customers,
-    };
+  } catch (error) {
+    console.error("getCustomersDashboard API failed:", error);
+    throw error;
   }
 }
 
@@ -247,7 +237,7 @@ export async function getCustomerDetail(customerId: string | number = 1): Promis
       apiGet<ApiCustomerDetailResponse>(`/customers/${customerId}`),
       apiGet<ApiLeadListResponse>(`/customers/${customerId}/leads`),
       apiGet<ApiTimelineResponse>(`/customers/${customerId}/timeline`),
-      getDashboardStats(customerDetailStats),
+      getDashboardStats(),
     ]);
 
     const apiLeads = leadsResponse.items.map(mapApiLeadToLead);
@@ -255,24 +245,13 @@ export async function getCustomerDetail(customerId: string | number = 1): Promis
 
     return {
       profile: mapApiCustomerDetailToProfile(profileResponse),
-      stats: apiStats.length > 0 ? apiStats : customerDetailStats,
-      leads: apiLeads.length > 0 ? apiLeads : customerDetailLeads,
-      timeline: apiTimeline.length > 0 ? apiTimeline : customerTimeline,
+      stats: apiStats,
+      leads: apiLeads,
+      timeline: apiTimeline,
     };
-  } catch {
-    return {
-      profile: {
-        id: 1,
-        name: "株式会社サンプル",
-        contact: "佐藤様",
-        email: "sample@example.com",
-        status: "商談中",
-        nextAction: "本日中に再フォロー",
-      },
-      stats: customerDetailStats,
-      leads: customerDetailLeads,
-      timeline: customerTimeline,
-    };
+  } catch (error) {
+    console.error("getCustomerDetail API failed:", error);
+    throw error;
   }
 }
 
@@ -281,41 +260,26 @@ export async function getLeadDetail(leadId: string | number = 1): Promise<LeadDe
     const [detailResponse, timelineResponse, apiStats] = await Promise.all([
       apiGet<ApiLeadDetailResponse>(`/leads/${leadId}`),
       apiGet<ApiTimelineResponse>(`/leads/${leadId}/timeline`),
-      getDashboardStats(leadDetailStats),
+      getDashboardStats(),
     ]);
 
     const apiTimeline = timelineResponse.items.map(mapApiTimelineToTimeline);
 
     return {
       detail: mapApiLeadDetailToLeadDetail(detailResponse),
-      stats: apiStats.length > 0 ? apiStats : leadDetailStats,
-      timeline: apiTimeline.length > 0 ? apiTimeline : leadTimeline,
+      stats: apiStats,
+      timeline: apiTimeline,
     };
-  } catch {
-    return {
-      detail: {
-        id: 1,
-        customer: "株式会社サンプル",
-        subject: "見積のご確認について",
-        priority: "高",
-        category: "見積",
-        status: "waiting_reply",
-        estimatedProfit: "¥120,000",
-        recoverableProfit: "¥100,000",
-        delayDays: 3,
-        nextAction: "本日中に確認フォロー",
-        body: "お世話になっております。先日いただいた見積内容について確認させてください。条件面を再度確認したうえで、進行可否をご連絡いたします。",
-      },
-      stats: leadDetailStats,
-      timeline: leadTimeline,
-    };
+  } catch (error) {
+    console.error("getLeadDetail API failed:", error);
+    throw error;
   }
 }
 
 export async function getResultsDashboard(): Promise<ResultsDashboardData> {
   try {
     const [stats, insightsResponse, forecast, selfEvaluation] = await Promise.all([
-      getDashboardStats(resultStats),
+      getDashboardStats(),
       apiGet<ApiResultInsightsResponse>("/results/insights"),
       apiGet<ApiSalesForecastResponse>("/sales-forecast/summary"),
       apiGet<ApiSelfEvaluationSummaryResponse>("/self-evaluation/summary"),
@@ -323,16 +287,12 @@ export async function getResultsDashboard(): Promise<ResultsDashboardData> {
 
     return {
       stats,
-      insights: insightsResponse.items.length > 0 ? insightsResponse.items : resultInsights,
+      insights: insightsResponse.items,
       forecast,
       selfEvaluation,
     };
-  } catch {
-    return {
-      stats: resultStats,
-      insights: resultInsights,
-      forecast: null,
-      selfEvaluation: null,
-    };
+  } catch (error) {
+    console.error("getResultsDashboard API failed:", error);
+    throw error;
   }
 }

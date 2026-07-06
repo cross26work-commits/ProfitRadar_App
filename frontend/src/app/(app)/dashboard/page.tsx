@@ -71,7 +71,7 @@ export default function HomePage() {
         title="今日の最優先判断"
         decision="高利益案件から返信してください"
         reason="返信遅延がある案件ほど、放置による失注リスクが上がります。"
-        nextAction="株式会社サンプルへ本日中にフォロー。"
+        nextAction={dashboard.tasks[0]?.title ?? "本日すぐ対応すべき案件はありません。"}
       />
 
       <DangerLeadSection risks={dashboard.risks} />

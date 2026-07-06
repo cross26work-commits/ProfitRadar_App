@@ -19,36 +19,12 @@ export type SettingsDashboardData = {
   app: AppSetting;
 };
 
-const fallbackSettings: SettingsDashboardData = {
-  gmail: {
-    connected: false,
-    label: "接続状態",
-    description: "Gmail OAuthは未接続です。",
-    provider: "gmail",
-  },
-  sms: {
-    connected: false,
-    label: "SMS状態",
-    description: "Twilio SMSは未接続です。",
-    provider: "twilio",
-  },
-  app: {
-    company: "未設定",
-    plan: "未契約",
-    message: "settings fallback",
-  },
-};
-
 export async function getSettingsDashboard(): Promise<SettingsDashboardData> {
-  try {
-    const [gmail, sms, app] = await Promise.all([
-      apiGet<ConnectionSetting>("/settings/gmail"),
-      apiGet<ConnectionSetting>("/settings/sms"),
-      apiGet<AppSetting>("/settings/app"),
-    ]);
+  const [gmail, sms, app] = await Promise.all([
+    apiGet<ConnectionSetting>("/settings/gmail"),
+    apiGet<ConnectionSetting>("/settings/sms"),
+    apiGet<AppSetting>("/settings/app"),
+  ]);
 
-    return { gmail, sms, app };
-  } catch {
-    return fallbackSettings;
-  }
+  return { gmail, sms, app };
 }
