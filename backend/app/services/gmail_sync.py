@@ -131,10 +131,13 @@ class SyncStore:
         return rows[0] if rows else {"version":0}
 
     def commit(self,previous,next_state,records):
+        persisted_state=dict(next_state)
+        if persisted_state.get("pending_ids") is None:
+            persisted_state["pending_ids"]=[]
         return self.db.rpc("commit_gmail_inbound_page",{
             "p_company_id":self.company_id,"p_owner_id":self.owner_id,
             "p_connection_id":self.connection["id"],"p_mailbox":self.connection["email"].lower(),
-            "p_expected_version":previous["version"],"p_state":next_state,"p_records":records,
+            "p_expected_version":previous["version"],"p_state":persisted_state,"p_records":records,
         }).execute().data
 
 

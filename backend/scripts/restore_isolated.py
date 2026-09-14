@@ -17,9 +17,14 @@ LABEL="profit-radar-disposable"
 
 
 def command(args):
-    completed=subprocess.run(args,capture_output=True,text=True,timeout=180,check=False)
+    completed=subprocess.run(args,capture_output=True,text=True,encoding="utf-8",errors="replace",timeout=180,check=False)
     if completed.returncode:
-        raise RuntimeError("Isolated restore command failed; no raw database output recorded")
+        operation = args[2] if len(args) > 2 else args[0]
+        diagnostic = (completed.stderr or "").replace("\r", " ").replace("\n", " ")[:1200]
+        raise RuntimeError(
+            f"Isolated restore command failed: operation={operation}, "
+            f"returncode={completed.returncode}, stderr={diagnostic}"
+        )
     return completed.stdout.strip()
 
 
@@ -34,11 +39,11 @@ def fingerprint(db):
     # content is not read: row checks below use counts, NOT row values.
     parts=[]
     for query in (
-        "select n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,c.relowner,c.relacl from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') and c.relkind in ('r','v','S') order by 1,2",
+        "select n.nspname,c.relname,c.relkind,c.relrowsecurity,c.relforcerowsecurity,c.relowner,case when c.relacl is null then '<NULL>' else array_to_string(array(select x::text from unnest(c.relacl) x order by x::text),',') end from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') and c.relkind in ('r','v','S') order by 1,2",
         "select table_schema,table_name,column_name,data_type,is_nullable,column_default from information_schema.columns where table_schema in ('public','auth') order by 1,2,ordinal_position",
         "select schemaname,tablename,policyname,roles,cmd,qual,with_check from pg_policies where schemaname in ('public','auth') order by 1,2,3",
-        "select n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),p.proowner,p.proacl,p.prosecdef,p.proconfig,pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','auth') and p.prokind='f' order by 1,2,3",
-        "select n.nspname,c.relname,a.attname,a.attacl from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') and a.attnum>0 and not a.attisdropped order by 1,2,3",
+        "select n.nspname,p.proname,pg_get_function_identity_arguments(p.oid),p.proowner,case when p.proacl is null then '<NULL>' else array_to_string(array(select x::text from unnest(p.proacl) x order by x::text),',') end,p.prosecdef,p.proconfig,pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','auth') and p.prokind='f' order by 1,2,3",
+        "select n.nspname,c.relname,a.attname,case when a.attacl is null then '<NULL>' else array_to_string(array(select x::text from unnest(a.attacl) x order by x::text),',') end from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') and a.attnum>0 and not a.attisdropped order by 1,2,3",
         "select n.nspname,c.relname,con.conname,pg_get_constraintdef(con.oid) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','auth') order by 1,2,3",
     ):
         parts.append(sql(db,query))
@@ -71,8 +76,11 @@ def run(approved=False,workers_stopped=False):
     command(["docker","exec",CONTAINER,"install","-d","-m","700",folder])
     command(["docker","exec",CONTAINER,"pg_dump","-h","/var/run/postgresql","-U","postgres","-d","postgres","-Fc","-n","public","-n","auth","-n","extensions","-e","uuid-ossp","-e","pgcrypto","-f",archive])
     command(["docker","exec",CONTAINER,"createdb","-h","/var/run/postgresql","-U","postgres","-T","template0",database])
-    # Only the newly created random target is cleaned, never the source DB.
-    command(["docker","exec",CONTAINER,"pg_restore","-h","/var/run/postgresql","-U","postgres","-d",database,"--single-transaction","--exit-on-error","--clean","--if-exists",archive])
+    command(["docker","exec",CONTAINER,"psql","-X","-h","/var/run/postgresql","-U","supabase_admin","-d",database,"-v","ON_ERROR_STOP=1","-c",
+             "drop schema if exists public cascade; drop schema if exists auth cascade; drop schema if exists extensions cascade;"])
+    # Restore only into the newly created random empty target database.
+    # Do not use --clean: policy/object DROP statements can fail when their parent relation does not yet exist.
+    command(["docker","exec",CONTAINER,"pg_restore","-h","/var/run/postgresql","-U","supabase_admin","-d",database,"--single-transaction","--exit-on-error",archive])
     restored,restored_count=fingerprint(database)
     after,_=fingerprint("postgres")
     if before!=after:raise RuntimeError("Source changed during rehearsal; stop writers and repeat with a fresh target")
