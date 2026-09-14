@@ -1,5 +1,11 @@
 # Release skip分類
-2026-09-14。全25件、合格加算0。最新全pytest: 178 passed /25 skipped。
+更新2026-09-15。最新: Backend **212 passed /0 skipped**、integration **31 passed /0 skipped**。
+Docker/WSLは利用可能となり、下記旧25ケースを全件実行した。新規実DBケース2件（cursor NULL/[]、Service Role RPC迂回拒否）もPASS。
+integration31件にはDB/Authケース27件と接続先guard4件を含む。外部Google/Stripe成功へは加算しない。
+以下は2026-09-14時点の履歴分類。現在のskip理由ではない。
+
+## 過去記録
+2026-09-14当初。全25件、合格加算0。当時の全pytest: 178 passed /25 skipped。
 
 全件 backend/tests/integration/test_p0_supabase_isolation.py の test_ 接頭辞付き。
 共通分類: EXTERNAL / REAL SUPABASE REQUIRED。専用localhost54321のAuth/PostgREST/PostgreSQL、baseline/migration、正常login JWTが必要。

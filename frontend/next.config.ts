@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
+import { backendOrigin } from "./config/backend-origin";
 
 const nextConfig: NextConfig = {
   async rewrites() {
+    const destinationOrigin = backendOrigin(process.env);
     return [
       {
         source: "/backend-api/:path*",
-        destination: "http://127.0.0.1:8001/:path*",
+        destination: `${destinationOrigin}/:path*`,
       },
     ];
   },

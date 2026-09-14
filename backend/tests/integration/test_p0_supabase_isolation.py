@@ -462,3 +462,45 @@ def test_billing_mode_promotion_rejects_test_history_and_browser(environment):
     with pytest.raises(APIError) as error:service.rpc("promote_billing_live",args).execute()
     assert error.value.code=="P0001"
     assert service.table("billing_runtime_config").select("mode").eq("singleton",True).single().execute().data=={"mode":"test"}
+
+
+def test_cursor_null_empty_contract_with_current_sync_store(environment):
+    from app.services.gmail_sync import SyncStore
+    _, service, actors = environment
+    company = actors[1][2]["company_id"]
+    connection = service.table("gmail_connections").insert({"company_id": company,
+        "email": "cursor-contract@example.invalid", "token_json": {}, "status": "connected"}).execute().data[0]
+    owner = str(uuid4())
+    assert service.rpc("claim_gmail_work", {"p_company_id": company, "p_owner_id": owner, "p_purpose": "sync"}).execute().data is True
+    try:
+        store = SyncStore(service, company, connection)
+        previous = store.load()
+        state = {"mode": "delta", "history_id": "100", "initial_since": 1,
+                 "page_token": None, "pending_ids": None, "pending_page": None, "caught_up": True}
+        service.rpc("commit_gmail_inbound_page", {"p_company_id": company, "p_owner_id": owner,
+            "p_connection_id": connection["id"], "p_mailbox": connection["email"],
+            "p_expected_version": previous["version"], "p_state": state, "p_records": []}).execute()
+        null_row = store.load()
+        assert null_row["pending_ids"] is None and null_row["pending_page"] is None
+        assert null_row["version"] == previous["version"] + 1
+        store.commit(null_row, state, [])
+        empty_row = store.load()
+        assert empty_row["pending_ids"] == [] and empty_row["pending_page"] is None
+        assert empty_row["version"] == null_row["version"] + 1
+        assert service.table("gmail_inbound_receipts").select("gmail_message_id").eq("company_id",company).execute().data == []
+    finally:
+        service.rpc("release_gmail_work", {"p_company_id": company, "p_owner_id": owner}).execute()
+
+
+def test_service_role_reservations_and_deletion_status_require_rpc(environment):
+    _, service, actors = environment
+    company = actors[1][2]["company_id"]
+    for table in ("ai_budget_reservations", "account_deletion_jobs", "financial_records", "financial_payments"):
+        before = service.table(table).select("*").eq("company_id",company).execute().data
+        with pytest.raises(APIError) as error:
+            service.table(table).insert({"company_id": company}).execute()
+        assert error.value.code == "42501"
+        with pytest.raises(APIError) as error:
+            service.table(table).update({"company_id": company}).eq("company_id",company).execute()
+        assert error.value.code == "42501"
+        assert service.table(table).select("*").eq("company_id",company).execute().data == before

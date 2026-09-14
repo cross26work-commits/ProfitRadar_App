@@ -1,39 +1,44 @@
 # 販売実装 継続チェックポイント
-更新: 2026-09-14 JST
+2026-09-15 JST
 
-## 保持する状態
-Repository C:\Users\closs\ProfitRadar_App
+Repo C:\Users\closs\ProfitRadar_App
 Branch arc/profit-radar-release-readiness
-HEAD 3c9a83ad2264899187bd67d1ec9ccac7b8100f70
-全未コミット/未追跡変更が成果物。既存backup/logを保持、秘密値を読出し・転記しない。commit/push・本番変更・実送信・実課金・公開なし。
+HEAD 27d6ec0777e7019a3319cbd273999d84b18b2a5f
+既存未コミット変更を保持。commit/pushなし。過去migrationを変更しない。
 
-## 最新判定
-CODE COMPLETE / EXTERNAL REQUIRED。根拠と限界は SALES_RELEASE_FINAL.md。
-178 passed / 25 skipped、compileall/pip check/pip-audit/TS/lint/build/npm audit/diff PASS。
-Server API Node tests 2 passed。25件は RELEASE_SKIP_CLASSIFICATION.md に全件掲載。skipは実Auth/DB合格に含めない。
-Google Fontsのbuild時ネットワーク障害をOSフォント化で解消し再build成功。
+## 現在地
+新規 202609140001_remote_schema_forward.sql 完成、ローカル検証済み、remote未接続。
+SHA256とobjects/ACL/依存・適用前後チェックリストは REMOTE_SCHEMA_FORWARD_REVIEW.md。
+現在のremote適用判定は「適用禁止」：ユーザーがまだ適用を承認しておらず、実remote定義との最終照合も未実施。
+コード準備と外部GateはSALES_RELEASE_FINAL.mdで区別。
 
-## 実装済み
-AI予算予約/hard limit、resumable deletion、Gmail初回30日/page/history/atomic cursor、SENT起点、send operation/UNKNOWN、Draft復元、分割入金/JST集計、entitlement、Checkout recovery。
-加えて、詳細表示view共有と安全なServer APIエラー、Stripe production設定/DB gate、Gmail再接続競合DBtest、件数のみ監視通知、隔離restore演習コード。
-Stripe gateのmigration 202609110001は未適用。test既定/live無効のまま。
+## 最新実行
+Backend212 passed/0 skipped、integration31 passed/0 skipped。
+Frontend Node5、tsc/lint/build/npm audit PASS。
+Forward validator fresh/旧schema相当/再実行PASS、conflict rollback10/10、billing=test。
+restore演習54 tablesのschema/ACL/件数一致とsource不変PASS。
+実Google/Stripeは未実施。SDKの非推奨警告6件はFAILではないが今後対応対象。
 
-## UI検証
-11 routesのPC/390px fixture表示と画像保存。編集→保存→reload→確認→fixture送信→Financials保存を確認。
-UNKNOWN・支払失敗・同期失敗・未接続もfixture操作確認。本物Auth/DBとは区別。
-全画像の個別目視、全状態組合せは網羅していない。次の実環境E2Eで追加確認し、問題はコード課題へ戻す。
-fixture: frontendで node tests/ui/serve.mjs、loopback3190。ユーザー既存8001/3001プロセスを停止しない。
+## 今回修正
+- Service Roleのdefault由来ALLを対象10内部tableだけ最小権限へ限定。
+- NULL/[] pending_ids契約、RPC迂回拒否を実DBテスト追加。
+- restore unitを最新checkpointに追従。
+- SQLの厳密UTF-8・元日本語literal一致テスト追加。
+- next.configの固定BackendをBACKEND_ORIGINへ変更。developmentのみ127.0.0.1:8000既定。
+- productionではBACKEND_ORIGIN/NEXT_PUBLIC_API_BASE_URLに明示HTTPS originが必要。既存.envは未編集。
 
-## 次の作業（承認境界を維持）
-1. Docker/WSLが利用可能になったら scripts/start-isolated-tests.ps1 -RunTests。fixtureがA/Bユーザーと正規JWTを自動作成。無許可共有DB接続禁止。
-2. 全25実DBケースの実行と修正。SQL構文PASSだけでは適用成功を断定しない。
-3. 新規隔離DB限定restore演習（RELEASE_RUNBOOK参照）。現状Docker未導入で未実行。
-4. 承認された管理下Google E2EとStripe実test E2E。実送信は直前再承認、live keyや実課金は禁止のまま。
-5. 法務/ドメイン/Google審査/通知先/保持条件をOWNER_ACTIONSで確定。
-6. 本番schemaのreadonly照合→復元可能backup→別承認→migration/設定/公開。
-新たなコード欠陥が出ればCODE COMPLETEを撤回し、修正と全回帰を行う。
+## 次の再開
+1. remote接続/metadata確認の明示承認を得る。現時点でSQL Editor、db pushは禁止。
+2. preflightの個別SELECT、schema/関数全文/ACL backup、復元手段、作業窓を人間が確認。
+3. 差異があればforwardを修正してローカル全回帰。過去SQL再適用や不明policy削除は禁止。
+4. 別途適用承認後、新SQL一本を新しいsessionでtransaction適用。エラーなら停止/rollback確認。
+5. 適用後チェックリストを実施。Gmail/課金/Cron/公開へ勝手に進まない。
 
-## Migration/復旧
-202609100002は未適用前提で編集済み。既適用先にはforward差分が必要。005〜008および202609110001等も今回本番適用していない。
-監査SQLだけではcommit後の完全復元を保証しない。ACL/列権限/RLS/関数owner・定義と検証済みbackupを保管。
-解除/recoveryの単純な時間経過再実行は禁止。全writer停止と証跡review、operator/ticket記録が必要。
+## 隔離環境
+Dockerはユーザーインストール:
+C:\Users\closs\AppData\Local\Programs\DockerDesktop\resources\bin
+固定project/container profit-radar-disposable、loopback54321/54322。
+validate_forward_localは新規pr_forward_* DBのみ作成し保持。既存DBをresetしない。
+restoreは新規pr_restore_* DBに限定。証跡は保持、無断削除しない。
+.local-isolated-failed-* / .local-isolated-old-* はcommit対象外。git add .を使わない。
+検証buildの.nextは仮URL入りなので公開不可。本番設定を確定して再buildする。

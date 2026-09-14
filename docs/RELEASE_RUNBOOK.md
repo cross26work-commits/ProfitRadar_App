@@ -1,4 +1,22 @@
 # Profit Radar 公開・復旧・運営手順
+## 2026-09-15 更新（以下の旧環境記述より優先）
+
+remoteは未接続・未適用。現在は適用禁止。承認、preflight、backup、適用後確認をREMOTE_SCHEMA_FORWARD_REVIEW.mdで管理する。
+最新Backend212 passed/0 skipped、integration31 passed/0 skipped。Docker/WSLは導入済みで旧「環境不足」記述は履歴。
+新規forward一本のみを対象とし、過去migration編集/再適用/db push/履歴repairを行わない。
+Forward validator 10 conflict rollbacks、billing=test。restore演習54 public/auth tables PASS、ただし本番DR全体の証明ではない。
+
+Frontend production設定:
+- BACKEND_ORIGIN: rewrite用HTTPS origin。URLにuserinfo/secret/queryを含めない。
+- NEXT_PUBLIC_API_BASE_URL: BrowserとServer API双方のHTTPS絶対origin。相対/backend-apiやloopbackは本番で使用不可。
+- developmentのみBackend既定127.0.0.1:8000。本番は未設定/不正URLならbuildを停止する。
+- 両値を本番build時と起動時に一致させ、CORSを確認。NEXT_PUBLIC値はbundleへ固定される。
+- 検証ではapi.example.invalidを使用し実通信していない。生成.nextをそのまま本番公開しない。
+
+新規forwardのcommit候補と除外はREMOTE_SCHEMA_FORWARD_REVIEW.md。commit/pushは今回実行禁止。
+
+## 従来手順（矛盾時は上記最新記録を優先）
+
 2026-09-14。**未公開 / CODE COMPLETE・EXTERNAL REQUIRED**。適用承認ではない。
 最新Gate: SALES_RELEASE_FINAL.md。再開位置: SALES_IMPLEMENTATION_CONTINUATION.md。
 旧版はhistory/RELEASE_RUNBOOK_before_20260911.mdへ退避した。

@@ -1,69 +1,52 @@
 # Sales Release Gate
-更新: 2026-09-14 JST
+更新: 2026-09-15 JST
 
 ## 判定
-**CODE COMPLETE / EXTERNAL REQUIRED**（今回確認したコード上の販売阻害について）。販売開始の許可ではない。
-- 確認済み未解消 P0 CODE DEFECTS: 0
-- 確認済み未解消 P1 SALES-BLOCKING CODE DEFECTS: 0
-- LOCAL TEST FAILURES: 0
-- LOCAL UNJUSTIFIED SKIPS: 0
-この判定は欠陥が存在しない保証ではない。実DB適用・正規Auth・外部provider・本番運用の合格とは別で、下記外部Gateは未合格。
+コード準備: **CODE COMPLETE / EXTERNAL REQUIRED**。
+remote適用: **適用禁止（現在の承認範囲・remote事前確認未完了）**。
+ローカル検証は販売開始やremote適用成功を意味しない。詳細/適用前後チェックリスト/commit候補は REMOTE_SCHEMA_FORWARD_REVIEW.md。
 
-## 検証対象
-Repository: C:\Users\closs\ProfitRadar_App
-Branch: arc/profit-radar-release-readiness
-HEAD: 3c9a83ad2264899187bd67d1ec9ccac7b8100f70
-HEADだけでなく既存未コミット・未追跡の実装を含むworking treeを検証。既存変更は保持。
-commit/push、本番DB変更、実メール、実課金、Cron登録、deployは未実施。
+## 検証対象と変更
+Repo C:\Users\closs\ProfitRadar_App
+Branch arc/profit-radar-release-readiness
+HEAD 27d6ec0777e7019a3319cbd273999d84b18b2a5f
+既存working treeを保持。新規forward一本を追加、過去migration変更なし。
+前段でSupabase default privilege由来のService Role全権限残存を検出し、一時CODE COMPLETEを撤回した。対象10内部tableの権限を必要範囲に限定するforwardと実DB拒否テストで修正・再検証。
+最新checkpointのrestore手順へテストを追従。新規DB以外を初期化しないことを追加検査。
+Frontend rewriteのlocalhost固定は本番で不適切なため環境変数化・production fail closedを実装。
 
-## 今回閉じたコード残件
-- 詳細画面の旧利益フォーム、固定SMS案内、生のServer APIエラーを除去。認証JWT、404/401誘導、安全なerror boundaryをテスト。
-- 返信編集→保存→reload→確認ダイアログ→fixture送信→成果入力を接続。送信UNKNOWNは保持して再照合、自動再送しない。
-- Stripe test/live切替は設定・DBモード・明示承認reference・HTTPS・provider livemode・画面expected_modeでfail closed。既定test。実live有効化なし。
-- Gmail解除復旧と再接続の競合、および課金モード切替拒否の実DBテストを追加（未実行）。
-- monitoringは件数のみのopt-in通知、restoreは専用ローカルDockerの新規DB限定。単体検証と実演習を分離。
-- build中Google Fonts取得失敗を確認し、ビルド時フォントダウンロードを除去。OS標準日本語/欧文フォントへ変更して再build成功。
-- 未認証/不正Bearer/Basicのonboarding HTTP拒否3件をローカルで実行。DB/provider未呼出も検査。
-
-## 最終ローカル実行（2026-09-14）
-| コマンド（各ディレクトリから） | 結果 |
+## 最新結果
+| 検証 | 結果/範囲 |
 |---|---|
-| backend: venv/Scripts/python.exe -m pytest -q -rs | **178 passed / 25 skipped** |
-| backend: venv/Scripts/python.exe -m compileall -q app tests scripts | PASS |
-| backend: venv/Scripts/python.exe -m pip check | PASS |
-| backend: venv/Scripts/python.exe -m pip_audit --progress-spinner off | 既知脆弱性なし |
-| frontend: node --test tests/server-api.test.mjs | 2 passed / 0 skipped |
-| frontend: npx tsc --noEmit | PASS |
-| frontend: npm run lint | PASS |
-| frontend: npm run build | PASS、21 routes |
-| frontend: npm audit | 0 vulnerabilities |
-| root: git -c core.safecrlf=false diff --check | PASS |
+| Backend全pytest（隔離Auth設定あり） | **212 passed /0 skipped**、SDK DeprecationWarning 6件 |
+| integration | **31 passed /0 skipped**（全回帰にも含む）。27 DB/Authケース＋4接続先guard |
+| UTF-8/forward grammar/restore関連 | 31 passed（全回帰の部分集合） |
+| compileall | PASS |
+| pip check / pip-audit | 前段PASS、既知脆弱性なし。依存変更なし |
+| Frontend Node tests | 5 passed（origin設定3＋Server API2） |
+| TypeScript / ESLint / production build | PASS、21 routes |
+| npm audit | 0 vulnerabilities |
+| Forward validator | fresh baseline/legacy forward/replay PASS、conflict rollback 10/10、billing_mode=test、remote_access=false |
+| Isolated restore | 前段実行PASS。54 public/auth tables、schema/ACL/件数一致、source unchanged |
+| git diff --check | PASS |
 
-25件全件分類: [RELEASE_SKIP_CLASSIFICATION.md](RELEASE_SKIP_CLASSIFICATION.md)。
-依存監査は確認時点の既知advisoryのみ。SQL構文テスト、provider/storage代替成功をDB/Gmail/Stripe E2E成功へ加算しない。
+buildには検証用HTTPS originをプロセス内指定。実Backend疎通は証明しない。.envは変更なし。本番URLで再buildが必要。
+restoreはStorage/global roles/本番DR全体を保証しない。外部メール/AI/決済は代替で、実Supabase Auth発行JWTとDBはローカルで実行した。
 
-## UI証拠と限界
-実component＋架空API、CSP connect-src noneのfixture。本番の認証bypassは追加していない。
-Dashboard / Reply / Customers / Leads / Results / Financials / Settings / Plan / Mail / Lead詳細 / Customer詳細をPC・390pxで読み込み、主要見出しを確認して画像保存。
-編集保存・reload復元・確認表示・fixture送信・Financials保存、UNKNOWN復元、同期失敗、未接続、支払失敗時の申込拒否を操作確認。
-docs/screenshots/gate-*.png、fixture-*.png。画像の一括保存と個別目視は区別し、全画像・全状態組合せの目視合格とはしない。
-本番のログインから課金までの通しE2E、実データ/ネットワーク障害時の表示は未検証。販売ページの準備中は維持。
+## SQL安全性
+forward SHA256: 0027F2B1740804DB72242F8511F13445C6118E8AB22ED72D6D191B999F7C049F
+UTF-8正常、日本語133文字、置換文字なし、参照元literal一致。
+既存関数置換0。未知定義・policy/view/trigger・ACL・index・overloadは停止。新規billing configはtestのみ。
+既存顧客行のUPDATE/DELETE/TRUNCATE/DROPなし。内部削除/昇格RPCは定義のみで実行しない。
+remoteは未接続・未適用。SQL Editor/db push/履歴repairなし。
 
-## 外部Release Gate
-| Gate | 状態・解除条件 |
-|---|---|
-| REAL SUPABASE REQUIRED | 25 skipped。Docker/WSL準備後、隔離baseline・全migration・正規JWT・RLS/RPC/atomicity/競合を実行。実schemaとの差分確認も必要 |
-| DOCKER RESTORE REQUIRED | 演習コードあり。Docker不足で実dump/restore未実施。単体成功は復元証拠ではない |
-| REAL GOOGLE REQUIRED | 管理下OAuth・移行/rotation/refresh/revoke・同期・送受信・UNKNOWN照合。別承認なしに送信しない |
-| STRIPE TEST REQUIRED | 代替処理のみ。実test-modeでWebhook再送/順序逆転/失敗/解約/再契約/UNKNOWNを実施 |
-| GOOGLE VERIFICATION REQUIRED | 本人の審査状態と外部提供条件の確認 |
-| STRIPE LIVE REQUIRED | 本番設定gateは実装済み・無効。実test E2Eと別承認後にのみ移行 |
-| DOMAIN REQUIRED | URL、HTTPS、OAuth redirect、CORSの実環境整合 |
-| LEGAL REVIEW REQUIRED | 販売者情報、問い合わせ、保持/返金/解約の確定 |
-| PRODUCTION DEPLOY REQUIRED | 全Gate確認、backup、通知到達、独立死活監視、適用・公開承認 |
+## 残る外部Gate
+- REMOTE SUPABASE: 実schema/ACL/RPC・backup・writer停止・適用承認・適用後検証。
+- REAL GOOGLE: OAuth、token移行/rotation/revoke、同期、管理下送受信、UNKNOWN照合。実送信は別承認。
+- STRIPE TEST: 実test-mode E2E未実施。今回test/live chargeなし。
+- GOOGLE VERIFICATION / DOMAIN / LEGAL REVIEW: 本人確認・審査・契約情報確定。
+- PRODUCTION DEPLOY: 本番設定、監視到達、DR、別承認。未公開を維持。
 
-## P1/P2と再開条件
-既知の販売阻害コード残件はない。実DBやproviderで欠陥が発覚した場合はコード課題へ戻し、この判定を更新する。
-UI全状態の網羅・全画像目視は追加QAであり実施済みとしない。実環境E2Eで主要操作に問題が出れば販売阻害として扱う。
-運用・適用: RELEASE_RUNBOOK.md。本人操作: OWNER_ACTIONS.md。
-新SQLを本番適用していない。202609100002が既適用の環境にはforward差分が必要。commit後復旧をtransaction失敗時rollbackと混同しない。
+未解消の既知コードP0/販売阻害P1は今回確認範囲で0。実remoteの安全性は未認定。
+以前の「Docker未導入、25 skipped」は履歴。現在の実行結果は本書を優先する。
+commit/push、本番変更、Gmail送信、Stripe chargeは未実施。

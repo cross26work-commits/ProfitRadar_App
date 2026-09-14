@@ -16,7 +16,7 @@ def setup(monkeypatch):
     context=[{"Endpoints":{"docker":{"Host":"unix:///var/run/docker.sock"}}}]
     info=[{"Config":{"Labels":{"com.supabase.cli.project":restore.LABEL}},"State":{"Running":True},
            "NetworkSettings":{"Ports":{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"54322"}]}}}]
-    command=Mock(side_effect=[json.dumps(context),json.dumps(info),"","","",""])
+    command=Mock(side_effect=[json.dumps(context),json.dumps(info),"","","","",""])
     monkeypatch.setattr(restore,"command",command)
     monkeypatch.setattr(restore,"fingerprint",Mock(return_value=("matching-metadata",12)))
     return command
@@ -30,6 +30,10 @@ def test_only_new_random_target_is_restored_source_is_unchanged(monkeypatch):
     assert restore_call[restore_call.index("-d")+1]==result["target_database"]
     assert result["target_database"].startswith("pr_restore_")
     assert "--single-transaction" in restore_call
+    preparation=next(c.args[0] for c in command.call_args_list if "psql" in c.args[0])
+    assert preparation[preparation.index("-d")+1]==result["target_database"]
+    assert preparation[preparation.index("-U")+1]=="supabase_admin"
+    assert "--clean" not in restore_call
     assert "dropdb" not in repr(command.call_args_list)
 
 
