@@ -34,11 +34,22 @@ def get_current_company_id(
     )
 
     rows = res.data or []
+
     if not rows:
-        raise HTTPException(status_code=403, detail="Company profile not found")
+        raise HTTPException(
+            status_code=403,
+            detail="Company profile not found",
+        )
 
     company_id = rows[0].get("company_id")
+
     if not company_id:
-        raise HTTPException(status_code=403, detail="Company ID not found")
+        raise HTTPException(
+            status_code=403,
+            detail="Company ID not found",
+        )
+
+    if db.rpc("company_is_active", {"p_company_id": company_id}).execute().data is not True:
+        raise HTTPException(status_code=423, detail="Company deletion is in progress")
 
     return company_id

@@ -1,0 +1,6 @@
+# Install as a systemd drop-in only after testing the approved HTTPS receiver.
+# Missing/failed delivery fails the job; configure an independent missed-heartbeat
+# alert at the receiver for a stopped host/worker. No secrets in this file.
+[Service]
+ExecStart=
+ExecStart=/opt/profit-radar/backend/venv/bin/python -m scripts.maintenance --expected-url ${SUPABASE_URL} --notify

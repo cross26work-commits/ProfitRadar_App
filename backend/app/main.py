@@ -1,9 +1,17 @@
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(override=False)
+from app.core.log_safety import configure as configure_safe_logging
+configure_safe_logging()
+from app.core.runtime_settings import cors_origins, validate_production
+validate_production()
+from app.api import account
+from app.api.billing import router as billing_router
+from app.api.financials import router as financials_router
 
-from app.api import reply, self_evaluation, sales_forecast, profit_events, actions, home_brief, dashboard_home
-from fastapi import FastAPI
+from app.api import reply, self_evaluation, sales_forecast, profit_events, actions, home_brief, dashboard_home, onboarding
+from fastapi import FastAPI, Depends
+from app.core.entitlements import enforce_entitlements
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.ai import router as ai_router
@@ -17,17 +25,17 @@ from app.routers import customers as customers_v2
 from app.routers import ai_judge, dashboard, learning, revenue, timeline
 
 app = FastAPI(
+    dependencies=[Depends(enforce_entitlements)],
     title="Profit Radar API",
     version="0.1.0",
     description="Backend API for Profit Radar App",
 )
+from app.core.error_boundary import install as install_error_boundary
+install_error_boundary(app)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +51,21 @@ def health():
 
 
 # Legacy / current API routers
+@app.get("/ready")
+def readiness():
+    from fastapi import HTTPException
+    from app.core.supabase_client import get_supabase_client
+    try:
+        db=get_supabase_client()
+        for table,key in (("gmail_send_operations","operation_id"),("company_billing","company_id"),("gmail_work_locks","company_id"),("reply_drafts","profit_event_id"),("ai_usage_runs","id"),
+                          ("ai_budget_reservations","id"),("account_deletion_jobs","id"),("account_deletion_audit","id"),
+                          ("gmail_sync_cursors","company_id"),("gmail_company_sync_runs","id"),("financial_records","profit_event_id"),("financial_payments","id")):
+            db.table(table).select(key).limit(1).execute()
+    except Exception:
+        raise HTTPException(503,"Service not ready") from None
+    return {"status":"ready"}
+
+
 app.include_router(leads_router)
 app.include_router(results_router)
 app.include_router(gmail_router)
@@ -65,3 +88,7 @@ app.include_router(profit_events.router)
 app.include_router(sales_forecast.router)
 app.include_router(self_evaluation.router)
 app.include_router(reply.router)
+app.include_router(onboarding.router)
+app.include_router(account.router)
+app.include_router(billing_router)
+app.include_router(financials_router)

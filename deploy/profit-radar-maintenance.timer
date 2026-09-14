@@ -1,0 +1,11 @@
+[Unit]
+Description=Profit Radar operational health counters every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=profit-radar-maintenance.service
+
+[Install]
+WantedBy=timers.target

@@ -10,10 +10,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
 
         <main className="min-w-0 flex-1 pb-20 lg:pb-0">
-          <Header
-            title="Profit Radar"
-            subtitle="3秒で利益と今日やることを把握します。"
-          />
+          <Header />
 
           <div className="mx-auto w-full max-w-6xl px-5 py-7 md:px-8 lg:px-10">
             {children}

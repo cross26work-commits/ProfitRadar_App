@@ -82,9 +82,9 @@ export function mapResultSummaryToStats(summary: ApiResultSummaryResponse): Stat
       sub: "API接続済み",
     },
     {
-      label: "見込利益",
+      label: "受注見込額",
       value: formatYen(summary.estimated_profit),
-      sub: "進行中案件",
+      sub: "原価未入力のため利益とは区別",
     },
     {
       label: "対応件数",

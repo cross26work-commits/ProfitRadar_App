@@ -1,5 +1,7 @@
-import { AppShell } from "@/components/layout/AppShell";
+﻿import { AppShell } from "@/components/layout/AppShell";
+import { OnboardingGuard } from "@/components/auth/OnboardingGuard";
 import { AuthGuard } from "@/providers/AuthGuard";
+
 
 export default function ProtectedAppLayout({
   children,
@@ -8,7 +10,11 @@ export default function ProtectedAppLayout({
 }) {
   return (
     <AuthGuard>
-      <AppShell>{children}</AppShell>
+      <OnboardingGuard>
+        <AppShell>
+          {children}
+        </AppShell>
+      </OnboardingGuard>
     </AuthGuard>
   );
 }

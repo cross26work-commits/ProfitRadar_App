@@ -1,0 +1,23 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {AppShell} from '../../src/components/layout/AppShell';
+import Dashboard from '../../src/app/(app)/dashboard/page';
+import Reply from '../../src/app/(app)/reply/page';
+import Customers from '../../src/app/(app)/customers/page';
+import Leads from '../../src/app/(app)/leads/page';
+import Results from '../../src/app/(app)/results/page';
+import Financials from '../../src/app/(app)/financials/page';
+import Settings from '../../src/app/(app)/settings/page';
+import Plan from '../../src/app/(app)/settings/plan/page';
+import Mail from '../../src/app/(app)/settings/mail/page';
+import {ReplyDraftForm} from '../../src/components/business/ReplyDraftForm';
+import {LeadDetailView} from '../../src/components/business/LeadDetailView';
+import {CustomerDetailView} from '../../src/components/business/CustomerDetailView';
+import {usePathname,href,state} from './fixture';
+const pages={'/dashboard':Dashboard,'/reply':Reply,'/customers':Customers,'/leads':Leads,'/results':Results,'/financials':Financials,'/settings':Settings,'/settings/plan':Plan,'/settings/mail':Mail,'/draft':()=> <ReplyDraftForm eventId="00000000-0000-4000-8000-000000000001"/>};
+const event='00000000-0000-4000-8000-000000000001',customer='00000000-0000-4000-8000-000000000002';
+const detail={id:event,customer:'架空のテスト顧客',subject:'E2E専用・見積相談',priority:'要確認',category:'見積相談',status:'open',estimatedProfit:'未確定（参考）',recoverableProfit:'未確定（参考）',delayDays:1,nextAction:'条件を確認して返信',body:'E2E専用の架空メールです。見積条件を確認したいです。'};
+pages[`/leads/${event}`]=()=> <LeadDetailView lead={{detail,stats:[],timeline:[{type:'mail',title:'根拠メール',body:detail.body,time:'2026/9/11'}]}}/>;
+pages[`/customers/${customer}`]=()=> <CustomerDetailView customer={{profile:{id:customer,name:detail.customer,email:'recipient@example.invalid',contact:'検証担当',status:'対応中',nextAction:detail.nextAction},stats:[],leads:[{...detail,rank:1,profit:'未確定',delay:'1日',href:`/leads/${event}`}],timeline:[]}}/>;
+function Page(){const Component=pages[usePathname()];return Component?<Component/>:<p role="alert">未対応のfixture経路です。合格として扱わないでください。</p>;}
+createRoot(document.getElementById('root')).render(<><div style={{padding:12,background:'#fff3cc'}}>隔離UI fixture／架空データ・実Auth/DBではありません・外部通信禁止<div>{Object.keys(pages).map(p=><a key={p} style={{display:'inline-block',padding:5}} href={href(p)}>{p}</a>)}</div><label>状態<select value={state} onChange={e=>{const u=new URL(location.href);u.searchParams.set('state',e.target.value);location.assign(u);}}>{['normal','loading','empty','error','disconnected','sync-failure','limit','unknown','expired','payment-failed'].map(s=><option key={s}>{s}</option>)}</select></label></div><AppShell><Page/></AppShell></>);

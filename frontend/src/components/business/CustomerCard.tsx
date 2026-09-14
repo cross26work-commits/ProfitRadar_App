@@ -24,7 +24,7 @@ export function CustomerCard({
           <p className="mt-1 font-black">{leads}</p>
         </div>
         <div>
-          <p className="text-slate-500">見込利益</p>
+          <p className="text-slate-500">参考候補額（利益未確定）</p>
           <p className="mt-1 font-black text-green-600">{profit}</p>
         </div>
         <div>

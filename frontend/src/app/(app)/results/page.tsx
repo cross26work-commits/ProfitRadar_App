@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FinancialSummary } from "@/components/business/FinancialSummary";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
 import { PageStack } from "@/components/sections/PageStack";
 import { ProfitSummarySection } from "@/components/sections/ProfitSummarySection";
@@ -65,6 +66,8 @@ export default function ResultsPage() {
         description="実回収・見込利益・対応結果を確認します。"
       />
 
+      <FinancialSummary />
+      <p className="text-sm text-slate-500">以下は旧モデルの参考値です。上記の手動確定収益とは別集計です。</p>
       <ProfitSummarySection items={results.stats} />
 
       <SalesForecastSection forecast={results.forecast} />

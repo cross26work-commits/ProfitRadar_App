@@ -155,9 +155,9 @@ export async function getHomeDashboard(): Promise<HomeDashboardData> {
           helper: "AIが優先順位付け",
         },
         {
-          label: "期待利益",
+          label: "受注見込額",
           value: yen(home.summary.total_estimated_profit),
-          helper: "TOP案件の合計",
+          helper: "原価未入力のため利益とは区別",
         },
         {
           label: "回収可能利益",
@@ -194,7 +194,7 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
           sub: "AI優先順位",
         },
         {
-          label: "期待利益",
+          label: "受注見込額",
           value: yen(home.summary.total_estimated_profit),
           sub: "返信候補合計",
         },

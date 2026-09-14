@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { CustomerListSection } from "@/components/sections/CustomerListSection";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
 import { PageStack } from "@/components/sections/PageStack";
-import { ProfitSummarySection } from "@/components/sections/ProfitSummarySection";
+import { FinancialSummary } from "@/components/business/FinancialSummary";
 import {
   getCustomersDashboard,
   type CustomersDashboardData,
@@ -18,13 +18,8 @@ export default function CustomersPage() {
   useEffect(() => {
     getCustomersDashboard()
       .then(setDashboard)
-      .catch((err) => {
-        console.error("Customers load failed:", err);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Customers load failed",
-        );
+      .catch(() => {
+        setError("顧客データを取得できませんでした。接続状態を確認して再読み込みしてください。");
       });
   }, []);
 
@@ -63,7 +58,8 @@ export default function CustomersPage() {
         description="顧客ごとの案件・利益・最終対応を確認します。"
       />
 
-      <ProfitSummarySection items={dashboard.stats} />
+      <FinancialSummary />
+      <p className="text-sm text-slate-500">顧客カードの候補額は旧モデルの参考値です。確定した入金・粗利ではありません。</p>
 
       <CustomerListSection
         title="顧客一覧"

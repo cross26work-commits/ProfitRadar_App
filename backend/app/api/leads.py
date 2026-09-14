@@ -28,12 +28,31 @@ def list_leads(
     )
 
     rows = res.data or []
+    customer_ids = [row.get("customer_id") for row in rows if row.get("customer_id")]
+    customers_by_id = {}
+    if customer_ids:
+        customer_res = (
+            db.table("customers")
+            .select("id,name,company_name,email")
+            .eq("company_id", company_id)
+            .in_("id", customer_ids)
+            .execute()
+        )
+        customers_by_id = {
+            customer.get("id"): customer
+            for customer in (customer_res.data or [])
+        }
 
     return {
         "items": [
             {
                 "id": row.get("id"),
-                "customer": customer_name,
+                "customer": (
+                    (customers_by_id.get(row.get("customer_id")) or {}).get("name")
+                    or (customers_by_id.get(row.get("customer_id")) or {}).get("company_name")
+                    or row.get("customer_name")
+                    or "顧客未設定"
+                ),
                 "subject": row.get("title") or "利益候補",
                 "priority": row.get("risk_level") or "未判定",
                 "category": row.get("category") or "未分類",

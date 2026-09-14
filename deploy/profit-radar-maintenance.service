@@ -1,0 +1,15 @@
+[Unit]
+Description=Profit Radar read-only operational health counters
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=profitradar
+WorkingDirectory=/opt/profit-radar/backend
+EnvironmentFile=/etc/profit-radar/backend.env
+# Audit cleanup is NOT enabled by this template. Owner must approve retention.
+ExecStart=/opt/profit-radar/backend/venv/bin/python -m scripts.maintenance --expected-url ${SUPABASE_URL}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

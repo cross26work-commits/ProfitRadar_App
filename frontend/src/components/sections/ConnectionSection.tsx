@@ -1,22 +1,17 @@
-import { ConnectionStatus } from "../business/ConnectionStatus";
-import { ActionBar } from "../ui/ActionBar";
-import { Button } from "../ui/Button";
+﻿import { ConnectionStatus } from "../business/ConnectionStatus";
 import { SettingsSection } from "./SettingsSection";
 
 export function ConnectionSection() {
   return (
     <SettingsSection
-      title="Gmail接続"
-      description="現在はダミー表示です。FastAPI接続後にOAuth状態を表示します。"
+      title="メール連携"
+      description="営業メールの接続状態を管理します。"
     >
       <ConnectionStatus
-        label="接続状態"
+        label="Google"
         connected={false}
-        description="Gmail OAuthは未接続です。"
+        description="接続状態はメール連携設定画面から確認できます。"
       />
-      <ActionBar>
-        <Button>Gmailを接続する</Button>
-      </ActionBar>
     </SettingsSection>
   );
 }

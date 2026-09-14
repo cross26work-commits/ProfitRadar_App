@@ -1,0 +1,20 @@
+[Unit]
+Description=Profit Radar five-minute Gmail sync worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=profitradar
+WorkingDirectory=/opt/profit-radar/backend
+EnvironmentFile=/etc/profit-radar/backend.env
+ExecStart=/opt/profit-radar/backend/venv/bin/python -m scripts.sync_worker
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

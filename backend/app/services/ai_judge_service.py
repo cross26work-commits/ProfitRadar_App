@@ -1,5 +1,9 @@
 from app.engines.ai_judge import judge_email
 from app.repositories.ai_judgement_repository import AIJudgementRepository
+from app.core.supabase_client import get_supabase_client
+from app.services.billing import require_use
+from app.services.ai_usage import measured_generation
+from fastapi import HTTPException
 
 
 class AIJudgeService:
@@ -13,8 +17,19 @@ class AIJudgeService:
         subject = payload.get("subject", "")
         sender = payload.get("sender", "")
         body = payload.get("body", "") or payload.get("content", "")
-
-        result = judge_email(subject=subject, sender=sender, body=body)
+        if not isinstance(body,str) or len(body)>30000:
+            raise HTTPException(413,"Analysis input exceeds limit")
+        db=self.repository.db if self.repository else get_supabase_client()
+        event=None
+        for table,key in (("customers","customer_id"),("profit_events","profit_event_id")):
+            if payload.get(key):
+                rows=db.table(table).select("*").eq("company_id",company_id).eq("id",payload[key]).limit(1).execute().data
+                if not rows: raise HTTPException(404,"Analysis resource not found")
+                if table=="profit_events": event=rows[0]
+        if event and payload.get("customer_id") and event.get("customer_id")!=payload["customer_id"]:
+            raise HTTPException(403,"Analysis relationship mismatch")
+        require_use(db,company_id)
+        result = measured_generation(db,company_id,lambda: judge_email(subject=subject, sender=sender, body=body))
 
         return {
             "company_id": company_id,

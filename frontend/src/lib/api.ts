@@ -3,6 +3,14 @@ import { supabase } from "@/lib/supabase/client";
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+export class ApiError extends Error {
+  constructor(public readonly status: number) {
+    super(({401:"ログインし直してください。",402:"試用・契約期間をご確認ください。",409:"別の処理が進行中です。",413:"入力が長すぎます。",429:"利用上限に達しました。",503:"一時的に利用できません。"} as Record<number,string>)[status] || "操作を完了できませんでした。");
+    this.name = "ApiError";
+  }
+}
+
+
 async function createHeaders() {
   const {
     data: { session },
@@ -19,6 +27,31 @@ async function createHeaders() {
   return headers;
 }
 
+
+async function handleSpecialResponse(response: Response) {
+  if (
+    response.status === 428 &&
+    typeof window !== "undefined"
+  ) {
+    window.location.replace("/onboarding");
+
+    await new Promise(() => {});
+  }
+}
+
+
+async function parseError(
+  response: Response,
+  method: string,
+  path: string
+): Promise<never> {
+  await handleSpecialResponse(response);
+
+  void method; void path;
+  throw new ApiError(response.status);
+}
+
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "GET",
@@ -27,25 +60,27 @@ export async function apiGet<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API GET failed: ${path} ${response.status} ${errorText}`);
+    return parseError(response, "GET", path);
   }
 
   return response.json() as Promise<T>;
 }
 
+
 export async function apiPost<T>(
   path: string,
-  body: unknown,
+  body?: unknown
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: await createHeaders(),
-    body: JSON.stringify(body),
+    body: body === undefined
+      ? undefined
+      : JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new Error(`API POST failed: ${path} ${response.status}`);
+    return parseError(response, "POST", path);
   }
 
   return response.json() as Promise<T>;
@@ -54,48 +89,55 @@ export async function apiPost<T>(
 
 export async function apiPatch<T>(
   path: string,
-  body: unknown,
+  body?: unknown
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PATCH",
     headers: await createHeaders(),
-    body: JSON.stringify(body),
+    body: body === undefined
+      ? undefined
+      : JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`API PATCH failed: ${path} ${response.status} ${errorText}`);
+    return parseError(response, "PATCH", path);
   }
 
   return response.json() as Promise<T>;
 }
 
+
 export async function apiPut<T>(
   path: string,
-  body: unknown,
+  body?: unknown
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "PUT",
     headers: await createHeaders(),
-    body: JSON.stringify(body),
+    body: body === undefined
+      ? undefined
+      : JSON.stringify(body),
   });
 
   if (!response.ok) {
-    throw new Error(`API PUT failed: ${path} ${response.status}`);
+    return parseError(response, "PUT", path);
   }
 
   return response.json() as Promise<T>;
 }
 
-export async function apiDelete(
-  path: string,
-): Promise<void> {
+
+export async function apiDelete<T>(
+  path: string
+): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "DELETE",
     headers: await createHeaders(),
   });
 
   if (!response.ok) {
-    throw new Error(`API DELETE failed: ${path} ${response.status}`);
+    return parseError(response, "DELETE", path);
   }
+
+  return response.json() as Promise<T>;
 }

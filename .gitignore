@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 .env
 .env.*
+!.env.example
+!backend/.env.example
 
 # Node / Next
 frontend/node_modules/
@@ -11,14 +13,31 @@ frontend/.next/
 frontend/out/
 frontend/.env
 frontend/.env.*
+!frontend/.env.example
 
 # OS
 .DS_Store
 
 # Backups
 backups/
+_backups/
+supabase/.temp/
+backup-*/
+.local-isolated/
 
 # Local SQLite databases
 *.db
 *.sqlite
 *.sqlite3
+
+# Local logs / backups
+*.log
+*.bak
+
+# Local temporary helper scripts
+add_account_delete.ps1
+repair_onboarding.ps1
+backend/inspect_event_conversation.py
+backend/test_conversation_reply.py
+backend/test_full_event_conversation.py
+backend/test_real_thread_ai.py

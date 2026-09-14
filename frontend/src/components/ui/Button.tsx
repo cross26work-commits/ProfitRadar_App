@@ -1,26 +1,43 @@
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+﻿type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   children: React.ReactNode;
   variant?: "primary" | "secondary" | "danger";
+  loading?: boolean;
 };
 
 export function Button({
   children,
   variant = "primary",
+  loading = false,
+  disabled,
   className = "",
   ...props
 }: ButtonProps) {
   const styles = {
-    primary: "bg-green-600 text-white hover:bg-green-700",
-    secondary: "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    primary:
+      "bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500",
+    secondary:
+      "bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400",
+    danger:
+      "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-100 disabled:text-red-400",
   };
 
   return (
     <button
       {...props}
-      className={`rounded-2xl px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${styles[variant]} ${className}`}
+      disabled={disabled || loading}
+      className={`
+        rounded-xl
+        px-5
+        py-3
+        text-sm
+        font-semibold
+        transition
+        disabled:cursor-not-allowed
+        ${styles[variant]}
+        ${className}
+      `}
     >
-      {children}
+      {loading ? "処理中..." : children}
     </button>
   );
 }

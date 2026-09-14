@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FinancialSummary } from "@/components/business/FinancialSummary";
 import { AIAdviceCard } from "@/components/business/AIAdviceCard";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
 import { DashboardOverviewSection } from "@/components/sections/DashboardOverviewSection";
@@ -56,10 +57,12 @@ export default function HomePage() {
   return (
     <PageStack>
       <DashboardHeroSection
-        title="今日の利益"
+        title="今日の対応と収益"
         description="利益・今日やること・返信優先案件を確認します。"
       />
 
+      <FinancialSummary />
+      <p className="text-sm text-slate-500">以下の候補額は旧モデルの参考値で、確定収益ではありません。</p>
       <DashboardOverviewSection
         stats={dashboard.stats}
         tasks={dashboard.tasks}

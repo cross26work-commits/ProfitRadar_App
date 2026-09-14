@@ -5,7 +5,7 @@ from typing import Any
 import requests
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import jwt
+import jwt
 
 load_dotenv()
 
@@ -29,8 +29,12 @@ def get_current_user(
                 token,
                 SUPABASE_JWT_SECRET,
                 algorithms=["HS256"],
-                options={"verify_aud": False},
+                audience="authenticated",
+                issuer=f"{SUPABASE_URL.rstrip('/')}/auth/v1",
+                options={"require": ["exp", "sub", "iss", "aud"]},
             )
+            if payload.get("role") != "authenticated" or not payload.get("sub"):
+                raise HTTPException(status_code=401, detail="Invalid token")
             return payload
 
         if not SUPABASE_URL:
@@ -48,9 +52,14 @@ def get_current_user(
         if response.status_code >= 400:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        return response.json()
+        user = response.json()
+        if not isinstance(user, dict) or not user.get("id"):
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user
 
     except HTTPException:
         raise
-    except Exception as error:
-        raise HTTPException(status_code=401, detail=f"Auth failed: {error}")
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication temporarily unavailable") from None
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token") from None

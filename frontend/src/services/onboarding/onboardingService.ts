@@ -1,0 +1,20 @@
+import { apiPost } from "@/lib/api";
+
+export type OnboardingResponse = {
+  success: boolean;
+  result: {
+    created: boolean;
+    company_id: string;
+    profile_id: string;
+  };
+};
+
+export async function completeOnboarding(params: {
+  companyName: string;
+  name: string;
+}) {
+  return apiPost<OnboardingResponse>("/onboarding", {
+    company_name: params.companyName,
+    name: params.name,
+  });
+}
