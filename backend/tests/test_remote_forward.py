@@ -30,6 +30,36 @@ def test_forward_utf8_japanese_literals_match_source_migrations():
     assert all(literal in forward for literal in literals)
 
 
+def test_v2_draft_is_utf8_parseable_and_blocks_before_persistent_changes():
+    root = Path(__file__).resolve().parents[2] / "supabase/migrations"
+    text = (root / "202609150001_remote_schema_forward_v2.sql").read_bytes().decode("utf-8", errors="strict")
+    assert "\ufffd" not in text
+    assert "元メールを確認して返信要否を判断" in text
+    assert pglast.parse_sql(text)
+    assert text.index("onboarding exact body/arguments mismatch") < text.index("ALTER FUNCTION public.onboard_user")
+
+
+def test_v2_validator_default_blocks_without_database():
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, str(Path(validation.__file__))], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "Explicit local fixture approval" in result.stderr
+
+
+def test_v2_pins_captured_bodies_without_replacing_canonical():
+    import re
+    root = Path(__file__).resolve().parents[2]
+    evidence = (root / 'docs/remote_onboarding_functiondefs_20260915_exact.txt').read_text(encoding='utf-8')
+    forward = (root / 'supabase/migrations/202609150001_remote_schema_forward_v2.sql').read_text(encoding='utf-8')
+    bodies = re.findall(r'AS \$function\$([\s\S]*?)\$function\$;', evidence)
+    assert len(bodies) == 2
+    assert all(body in forward for body in bodies)
+    assert 'ALTER FUNCTION public.create_company_and_profile' not in forward
+    assert 'CREATE OR REPLACE FUNCTION public.onboard_user' not in forward
+    assert 'FROM PUBLIC,anon,authenticated' in forward
+
+
 def test_validation_refuses_implicit_authority_before_docker(monkeypatch):
     command = Mock()
     monkeypatch.setattr(validation, "command", command)

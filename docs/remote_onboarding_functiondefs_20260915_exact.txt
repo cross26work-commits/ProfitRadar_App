@@ -1,0 +1,129 @@
+-- Profit Radar remote onboarding function definitions
+-- Source: remote read-only pg_get_functiondef / pg_proc inspection
+-- Contains no secrets, JWTs, or customer row data.
+-- Captured: 2026-09-15 JST
+
+-- public.onboard_user(uuid,text,text,text)
+-- owner: postgres
+-- SECURITY DEFINER: true
+-- proconfig: ["search_path=public"]
+-- proacl: NULL
+-- observed effective EXECUTE:
+--   anon=true
+--   authenticated=true
+--   service_role=true
+
+CREATE OR REPLACE FUNCTION public.onboard_user(p_user_id uuid, p_company_name text, p_name text, p_email text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+    v_existing_profile public.profiles%rowtype;
+    v_company public.companies%rowtype;
+    v_profile public.profiles%rowtype;
+begin
+    select *
+    into v_existing_profile
+    from public.profiles
+    where user_id = p_user_id
+    limit 1;
+
+    if found then
+        return jsonb_build_object(
+            'created', false,
+            'company_id', v_existing_profile.company_id,
+            'profile_id', v_existing_profile.id
+        );
+    end if;
+
+    insert into public.companies (
+        name,
+        plan,
+        owner_user_id
+    )
+    values (
+        trim(p_company_name),
+        'free',
+        p_user_id
+    )
+    returning *
+    into v_company;
+
+    insert into public.profiles (
+        user_id,
+        company_id,
+        name,
+        role,
+        email
+    )
+    values (
+        p_user_id,
+        v_company.id,
+        trim(p_name),
+        'owner',
+        p_email
+    )
+    returning *
+    into v_profile;
+
+    return jsonb_build_object(
+        'created', true,
+        'company_id', v_company.id,
+        'profile_id', v_profile.id
+    );
+end;
+$function$;
+
+-- public.create_company_and_profile(text,text)
+-- owner: postgres
+-- SECURITY DEFINER: true
+-- proconfig: ["search_path=pg_catalog, public"]
+-- proacl: {postgres=X/postgres,authenticated=X/postgres}
+-- observed effective EXECUTE:
+--   anon=false
+--   authenticated=true
+--   service_role=false
+
+CREATE OR REPLACE FUNCTION public.create_company_and_profile(company_name text, owner_name text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+declare
+  new_company_id uuid;
+  caller_email text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  if nullif(trim(company_name), '') is null or nullif(trim(owner_name), '') is null then
+    raise exception 'Company name and owner name are required';
+  end if;
+
+  if exists (select 1 from public.profiles where user_id = auth.uid()) then
+    raise exception 'Profile already exists';
+  end if;
+
+  caller_email := coalesce(auth.jwt() ->> 'email', '');
+
+  insert into public.companies(name, plan)
+    values (trim(company_name), 'free')
+    returning id into new_company_id;
+
+  insert into public.profiles(user_id, company_id, name, full_name, email, role)
+    values (
+      auth.uid(),
+      new_company_id,
+      trim(owner_name),
+      trim(owner_name),
+      caller_email,
+      'owner'
+    );
+
+  return new_company_id;
+end;
+$function$;

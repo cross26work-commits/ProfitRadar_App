@@ -3,6 +3,167 @@
 -- No customer/mail/token rows or function bodies are returned.
 -- Retain full schema/ACL/function backup separately: these summaries are NOT a rollback backup.
 
+-- V2-0. Legacy onboarding prerequisite: never create/guess this remote column.
+-- User-provided read-only evidence, 2026-09-15: uuid, nullable YES,
+-- default auth.uid(), identity NO, generated NEVER. Not remotely re-read by agent.
+SELECT 'companies.owner_user_id' AS prerequisite,
+ CASE WHEN a.atttypid='uuid'::regtype THEN 'COMPATIBLE' ELSE 'MISSING_OR_INCOMPATIBLE' END AS status,
+ format_type(a.atttypid,a.atttypmod) AS actual_type,a.attnotnull,
+ pg_get_expr(d.adbin,d.adrelid) AS column_default,a.attidentity,a.attgenerated
+ FROM (SELECT to_regclass('public.companies') oid) t
+ LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attname='owner_user_id' AND NOT a.attisdropped
+ LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum;
+
+-- V2-A. Checkout structural compatibility; ACL is reported separately because
+-- the approved forward normalizes legacy service-role default privileges.
+WITH target AS (SELECT to_regclass('public.billing_checkout_attempts') AS oid),
+expected(name,type_name,required,default_expr) AS (VALUES
+ ('company_id','uuid',true,NULL::text),('attempt_id','uuid',true,NULL::text),
+ ('session_id','text',false,NULL::text),('created_at','timestamptz',true,'now()'))
+SELECT CASE WHEN t.oid IS NULL THEN 'MISSING'
+ WHEN (SELECT relkind FROM pg_class WHERE oid=t.oid)<>'r'
+ OR (SELECT count(*) FROM pg_attribute WHERE attrelid=t.oid AND attnum>0 AND NOT attisdropped)<>4
+ OR EXISTS(SELECT 1 FROM expected e LEFT JOIN pg_attribute a ON a.attrelid=t.oid AND a.attname=e.name AND NOT a.attisdropped
+   LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+   WHERE a.attnum IS NULL OR a.atttypid IS DISTINCT FROM to_regtype('pg_catalog.'||e.type_name)::oid
+   OR a.attnotnull IS DISTINCT FROM e.required OR pg_get_expr(d.adbin,d.adrelid) IS DISTINCT FROM e.default_expr)
+ OR (SELECT count(*) FROM pg_constraint WHERE conrelid=t.oid)<>2
+ OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=t.oid AND contype='p' AND convalidated
+   AND conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=t.oid AND attname='company_id')]::smallint[])
+ OR NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=t.oid AND contype='f' AND convalidated
+   AND confrelid=to_regclass('public.companies') AND confdeltype='a' AND confupdtype='a'
+   AND conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=t.oid AND attname='company_id')]::smallint[]
+   AND confkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=to_regclass('public.companies') AND attname='id')]::smallint[])
+ OR (SELECT count(*) FROM pg_index WHERE indrelid=t.oid)<>1
+ OR EXISTS(SELECT 1 FROM pg_index WHERE indrelid=t.oid AND (NOT indisvalid OR NOT indisready OR NOT indisunique OR NOT indisprimary))
+ THEN 'INCOMPATIBLE' ELSE 'COMPATIBLE' END AS checkout_structure,
+ (SELECT relrowsecurity FROM pg_class WHERE oid=t.oid) AS rls_enabled,
+ (SELECT count(*) FROM pg_policy WHERE polrelid=t.oid) AS policy_count,
+ has_any_column_privilege('anon',t.oid,'SELECT,INSERT,UPDATE,REFERENCES') AS anon_column_access,
+ has_any_column_privilege('authenticated',t.oid,'SELECT,INSERT,UPDATE,REFERENCES') AS authenticated_column_access,
+ has_table_privilege('service_role',t.oid,'SELECT') AS service_select,
+ has_table_privilege('service_role',t.oid,'INSERT') AS service_insert,
+ has_table_privilege('service_role',t.oid,'UPDATE') AS service_update,
+ has_table_privilege('service_role',t.oid,'DELETE,TRUNCATE,TRIGGER,REFERENCES') AS service_extra_privileges
+ FROM target t;
+
+-- V2-B. Exact body/argument/config metadata pin; ACL/effective rights also below.
+WITH expected(name,args,result,body,config) AS (VALUES
+('onboard_user',ARRAY['p_user_id','p_company_name','p_name','p_email'],'jsonb'::regtype,$legacy_body$
+declare
+    v_existing_profile public.profiles%rowtype;
+    v_company public.companies%rowtype;
+    v_profile public.profiles%rowtype;
+begin
+    select *
+    into v_existing_profile
+    from public.profiles
+    where user_id = p_user_id
+    limit 1;
+
+    if found then
+        return jsonb_build_object(
+            'created', false,
+            'company_id', v_existing_profile.company_id,
+            'profile_id', v_existing_profile.id
+        );
+    end if;
+
+    insert into public.companies (
+        name,
+        plan,
+        owner_user_id
+    )
+    values (
+        trim(p_company_name),
+        'free',
+        p_user_id
+    )
+    returning *
+    into v_company;
+
+    insert into public.profiles (
+        user_id,
+        company_id,
+        name,
+        role,
+        email
+    )
+    values (
+        p_user_id,
+        v_company.id,
+        trim(p_name),
+        'owner',
+        p_email
+    )
+    returning *
+    into v_profile;
+
+    return jsonb_build_object(
+        'created', true,
+        'company_id', v_company.id,
+        'profile_id', v_profile.id
+    );
+end;
+$legacy_body$,ARRAY['search_path=public']),
+('create_company_and_profile',ARRAY['company_name','owner_name'],'uuid'::regtype,$canonical_body$
+declare
+  new_company_id uuid;
+  caller_email text;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  if nullif(trim(company_name), '') is null or nullif(trim(owner_name), '') is null then
+    raise exception 'Company name and owner name are required';
+  end if;
+
+  if exists (select 1 from public.profiles where user_id = auth.uid()) then
+    raise exception 'Profile already exists';
+  end if;
+
+  caller_email := coalesce(auth.jwt() ->> 'email', '');
+
+  insert into public.companies(name, plan)
+    values (trim(company_name), 'free')
+    returning id into new_company_id;
+
+  insert into public.profiles(user_id, company_id, name, full_name, email, role)
+    values (
+      auth.uid(),
+      new_company_id,
+      trim(owner_name),
+      trim(owner_name),
+      caller_email,
+      'owner'
+    );
+
+  return new_company_id;
+end;
+$canonical_body$,ARRAY['search_path=pg_catalog, public']))
+SELECT e.name, CASE WHEN p.oid IS NULL THEN 'MISSING'
+ WHEN (SELECT count(*) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname=e.name)<>1
+ OR p.proowner<>'postgres'::regrole OR NOT p.prosecdef OR p.prolang<>(SELECT oid FROM pg_language WHERE lanname='plpgsql')
+ OR p.proargnames IS DISTINCT FROM e.args OR p.prorettype<>e.result OR p.proretset
+ OR replace(p.prosrc,chr(13)||chr(10),chr(10))<>replace(e.body,chr(13)||chr(10),chr(10))
+ OR p.proconfig IS DISTINCT FROM e.config THEN 'UNKNOWN_OR_HARDENED_REVIEW_ACL'
+ ELSE 'EXACT_CAPTURED_BODY_AND_CONTRACT' END AS identity,
+ p.proconfig,p.proacl,pg_get_function_identity_arguments(p.oid) AS arguments,
+ has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute,
+ has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated_execute,
+ has_function_privilege('service_role',p.oid,'EXECUTE') AS service_execute
+FROM expected e LEFT JOIN pg_proc p ON p.pronamespace='public'::regnamespace AND p.proname=e.name;
+
+-- V2-C. Event triggers are not ordinary RPCs. Read metadata, do not REVOKE.
+SELECT e.evtname,e.evtevent,e.evtenabled,e.evttags,pg_get_userbyid(e.evtowner) AS trigger_owner,
+ p.oid::regprocedure AS function,p.prorettype::regtype AS return_type,
+ pg_get_userbyid(p.proowner) AS function_owner,p.prosecdef,p.proconfig,p.proacl,
+ has_function_privilege('anon',p.oid,'EXECUTE') AS anon_execute,
+ has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated_execute
+ FROM pg_event_trigger e JOIN pg_proc p ON p.oid=e.evtfoid
+ WHERE e.evtname='ensure_rls' OR (p.pronamespace='public'::regnamespace AND p.proname='rls_auto_enable');
+
 -- 1. Expected tables, existence, owner, RLS, kind. Missing is reported, not hidden.
 WITH targets(name) AS (VALUES ('account_deletion_audit'),('account_deletion_jobs'),('ai_budget_reservations'),('ai_judgements'),('ai_usage_runs'),('billing_checkout_attempts'),('billing_runtime_config'),('billing_webhook_events'),('calendar_events'),('companies'),('company_billing'),('conversation_analysis_snapshots'),('customers'),('financial_payments'),('financial_record_history'),('financial_records'),('gmail_company_sync_runs'),('gmail_connections'),('gmail_inbound_receipts'),('gmail_send_operations'),('gmail_sync_cursors'),('gmail_sync_runs'),('gmail_work_locks'),('learning_logs'),('messages'),('operation_recovery_audit'),('profiles'),('profit_events'),('reply_drafts'),('reply_logs'),('timeline'))
 SELECT t.name,c.relkind,pg_get_userbyid(c.relowner) AS owner,c.relrowsecurity,c.relforcerowsecurity,

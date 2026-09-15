@@ -15,6 +15,7 @@ from uuid import uuid4
 ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = "supabase_db_profit-radar-disposable"
 FORWARD = ROOT / "supabase/migrations/202609140001_remote_schema_forward.sql"
+FORWARD_V2 = ROOT / "supabase/migrations/202609150001_remote_schema_forward_v2.sql"
 
 
 def command(args, input=None, expected_error=None):
@@ -85,7 +86,7 @@ select string_agg(x,'|' order by x) from (
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def run(approved=False):
+def run(approved=False, v2=False):
     validate_target(approved)
     db = "pr_forward_" + uuid4().hex
     command(["docker", "exec", CONTAINER, "createdb", "-h", "/var/run/postgresql",
@@ -104,12 +105,25 @@ alter default privileges for role postgres in schema public grant all on tables 
     for path in migrations:
         if path.name >= "202609100002":
             break
+        if v2 and path.name.startswith('202609090007'):
+            continue
         sql(db, "set role postgres; set search_path=public,extensions;\n" + path.read_text(encoding="utf-8"))
         if path.name.startswith("202607020001"):
             sql(db, "set role postgres;\n" + (ROOT / "backend/tests/isolated/baseline.sql").read_text(encoding="utf-8"))
+    if v2:
+        evidence = (ROOT / 'docs/remote_onboarding_functiondefs_20260915_exact.txt').read_text(encoding='utf-8')
+        definitions = re.findall(r'CREATE OR REPLACE FUNCTION[\s\S]*?\$function\$;', evidence)
+        assert len(definitions) == 2
+        # New synthetic DB only: model observed remote instead of the newer local RPC.
+        sql(db, 'set role postgres; alter table public.companies add column owner_user_id uuid; drop function public.onboard_user(uuid,text,text,text); '
+            + '\n'.join(definitions) + '''
+revoke all on function public.create_company_and_profile(text,text) from public,anon,service_role;
+grant execute on function public.create_company_and_profile(text,text) to authenticated;
+''')
     legacy_tables = sql(db, "select tablename from pg_tables where schemaname='public' order by 1;").splitlines()
+    canonical_before = sql(db, "select pg_get_functiondef(oid)||proacl::text from pg_proc where oid='public.create_company_and_profile(text,text)'::regprocedure;") if v2 else None
     # The empty fresh DB path and populated old-schema path are both exercised.
-    forward = FORWARD.read_text(encoding="utf-8")
+    forward = (FORWARD_V2 if v2 else FORWARD).read_text(encoding="utf-8")
     sql(db, "set role postgres;\n" + forward.replace("COMMIT;", "ROLLBACK;"))
     assert sql(db, "select to_regclass('public.gmail_sync_cursors') is null;") == "t"
     company, customer, event = (str(uuid4()) for _ in range(3))
@@ -130,6 +144,8 @@ grant select on public.unrelated_forward_sentinel to authenticated;
     signature = schema_fingerprint(db)
     sql(db, "set role postgres;\n" + forward)
     assert signature == schema_fingerprint(db)
+    if v2:
+        assert canonical_before == sql(db, "select pg_get_functiondef(oid)||proacl::text from pg_proc where oid='public.create_company_and_profile(text,text)'::regprocedure;")
     cases = [
         ("alter table public.financial_records add column unexpected text;", "incompatible existing table"),
         ("create policy unexpected on public.gmail_sync_cursors for select to authenticated using(true);", "unexpected policy/trigger"),
@@ -142,20 +158,98 @@ grant select on public.unrelated_forward_sentinel to authenticated;
         ("alter table public.profiles enable always trigger prevent_deleted_user_onboarding;", "onboarding trigger conflict"),
         ("update public.billing_runtime_config set approval_ref='fixture-unapproved';", "test-only billing configuration required"),
     ]
+    if v2:
+        cases.extend([
+            ("alter table public.companies alter column owner_user_id type text using owner_user_id::text;", "prerequisite column/type mismatch"),
+            ("alter table public.billing_checkout_attempts add column unexpected text;", "incompatible existing table"),
+            ("create index unexpected_checkout on public.billing_checkout_attempts(session_id);", "unexpected checkout index"),
+        ])
     for mutation, expected in cases:
         print(json.dumps({"checking_rejection": expected}), flush=True)
-        sql(db, "begin; set role postgres;\n" + mutation + "\n" + forward, "FORWARD: " + expected)
+        error = 'FORWARD_V2: untrusted schema CREATE' if v2 and expected == 'untrusted public schema CREATE' else 'FORWARD: ' + expected
+        sql(db, "begin; set role postgres;\n" + mutation + "\n" + forward, error if expected != 'unexpected checkout index' else expected)
         assert signature == schema_fingerprint(db)
         assert before == rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"])
         assert committed_rows == rows_fingerprint(db, all_tables)
+    if v2:
+        identity_cases = [
+            ("alter function public.onboard_user(uuid,text,text,text) set search_path=public;", 'onboarding ACL mismatch'),
+            ("alter function public.onboard_user(uuid,text,text,text) security invoker;", 'owner/security/contract'),
+            ("set role supabase_admin; alter function public.onboard_user(uuid,text,text,text) owner to supabase_admin; set role postgres;", 'owner/security/contract'),
+            ("create function public.onboard_user(text) returns int language sql as 'select 1';", 'overload conflict'),
+            ("alter function public.create_company_and_profile(text,text) set search_path=public;", 'canonical config/return'),
+            ("grant execute on function public.create_company_and_profile(text,text) to anon;", 'ACL mismatch'),
+            ("alter function public.onboard_user(uuid,text,text,text) set statement_timeout='1s';", 'legacy config/return'),
+            ("create or replace function public.create_company_and_profile(company_name text,owner_name text) returns uuid language plpgsql security definer set search_path=pg_catalog,public as $$begin return null; end$$;", 'exact body/arguments'),
+            ("create or replace function public.onboard_user(p_user_id uuid,p_company_name text,p_name text,p_email text) returns jsonb language plpgsql security definer set search_path=pg_catalog,pg_temp as $$begin return '{}'::jsonb; end$$;", 'exact body/arguments'),
+        ]
+        for mutation, expected in identity_cases:
+            print(json.dumps({'identity_rejection': expected}), flush=True)
+            sql(db, 'begin; set role postgres;' + mutation + forward, expected)
+            assert signature == schema_fingerprint(db)
+            assert committed_rows == rows_fingerprint(db, all_tables)
+    jwt_result = None
+    if v2:
+        from validate_v2_jwt import verify
+        jwt_result = verify(db)
     return {"validation_db": db, "fresh_apply_rollback": True, "legacy_forward_commit": True,
             "legacy_rows_unchanged": True, "unrelated_acl_unchanged": True,
             "replay_no_schema_or_data_drift": True, "conflict_rollbacks": len(cases),
-            "billing_mode": "test", "remote_access": False}
+            "billing_mode": "test", "remote_access": False,
+            "v2_full": v2, "identity_rollbacks": len(identity_cases) if v2 else 0, 'jwt': jwt_result}
+
+
+def checkout_only_v2(approved=False):
+    """Isolated component proof, NOT proof that the blocked full v2 can commit."""
+    validate_target(approved)
+    source = FORWARD_V2.read_text(encoding="utf-8")
+    helpers = re.search(r"CREATE FUNCTION pg_temp.forward_table_signature[\s\S]*?END \$helper\$;", source).group()
+    table = re.search(r"SELECT pg_temp.forward_table\('billing_checkout_attempts'[\s\S]*?\$ddl\$\);", source).group()
+    indexes = re.search(r"DO \$checkout_indexes\$[\s\S]*?END \$checkout_indexes\$;", source).group()
+    acl = re.search(r"DO \$acl\$[\s\S]*?END \$acl\$;", source).group()
+    acl = re.sub(r"FOREACH t IN ARRAY ARRAY\[[^\]]+\]", "FOREACH t IN ARRAY ARRAY['billing_checkout_attempts']", acl)
+    component = ("BEGIN; SET ROLE postgres; SET LOCAL search_path=pg_catalog,public,pg_temp; "
+                 "CREATE TEMP TABLE forward_created(name text primary key) ON COMMIT DROP; "
+                 "CREATE TEMP TABLE companies (LIKE public.companies INCLUDING ALL) ON COMMIT DROP; "
+                 + helpers + table + indexes + acl + "COMMIT;")
+    db = "pr_forward_" + uuid4().hex
+    command(["docker", "exec", CONTAINER, "createdb", "-h", "/var/run/postgresql", "-U", "supabase_admin", "-T", "template0", db])
+    sql(db, "grant create,usage on schema public to postgres; grant usage on schema public to anon,authenticated,service_role; "
+            "set role postgres; create table public.companies(id uuid primary key); "
+            "insert into public.companies values('11111111-1111-4111-8111-111111111111');")
+    before = rows_fingerprint(db, ["companies"])
+    sql(db, component)
+    sql(db, "set role service_role; insert into public.billing_checkout_attempts(company_id,attempt_id) "
+            "values('11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222');")
+    signature = schema_fingerprint(db)
+    rows = rows_fingerprint(db, ["companies", "billing_checkout_attempts"])
+    sql(db, component)
+    assert schema_fingerprint(db) == signature
+    assert rows_fingerprint(db, ["companies", "billing_checkout_attempts"]) == rows
+    cases = [
+        ("alter table public.billing_checkout_attempts add column unexpected text;", "incompatible existing table"),
+        ("create policy unexpected on public.billing_checkout_attempts for select to authenticated using(true);", "unexpected policy/trigger"),
+        ("grant select(session_id) on public.billing_checkout_attempts to authenticated;", "browser effective"),
+        ("create index unexpected_checkout_index on public.billing_checkout_attempts(session_id);", "unexpected checkout index"),
+    ]
+    for mutation, expected in cases:
+        sql(db, "BEGIN; SET ROLE postgres;" + mutation + component, expected)
+        assert signature == schema_fingerprint(db)
+        assert rows_fingerprint(db, ["companies", "billing_checkout_attempts"]) == rows
+    assert before == rows_fingerprint(db, ["companies"])
+    return {"checkout_component_pass": True, "component_rejections": len(cases), "database": db,
+            "full_v2_pass": False, "reason": "Component-only run; use default full validator for v2 proof", "remote_access": False}
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-disposable-fixtures", action="store_true")
+    parser.add_argument("--checkout-only-v2", action="store_true")
+    parser.add_argument("--legacy-v1-validation", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run(args.allow_disposable_fixtures)))
+    if args.checkout_only_v2:
+        print(json.dumps(checkout_only_v2(args.allow_disposable_fixtures)))
+    elif args.legacy_v1_validation:
+        print(json.dumps(run(args.allow_disposable_fixtures)))
+    else:
+        print(json.dumps(run(args.allow_disposable_fixtures, v2=True)))
