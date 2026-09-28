@@ -1,14 +1,22 @@
 # Profit Radar release status
 
+## 2026-09-28 Release checkpoint freeze（最新）
+
+- Checkpoint commit: `c0af7d5a19a001ff3cbba0e8ca8d5fe50282f5e7` (`release: freeze Profit Radar P0 remediation checkpoint`).
+- Immutable source artifact: `C:\Users\closs\Documents\Codex\release-artifacts\profit-radar\profit-radar-c0af7d5a19a001ff3cbba0e8ca8d5fe50282f5e7.tar.gz`; SHA-256 `2AEC336E9582ADD1EF877F0EA6A2CE357465ED6D8AA1625A7D37B4D53BAE4537`.
+- Manifest SHA-256: `118DA4F3D860EDADAB9F1D86B4C80EEA079F25F486B026FEC7C0CBECE9863A9E`; source tree was clean, archive entries 511, forbidden local/build/secret artifacts 0.
+- Freeze verification: integration 32/0, Backend 318/0, frontend 8/0, TypeScript/ESLint/22-route build, Python compile/dependency audits, npm audit, staged secret scan 123/0 and diff checks PASS. Production side effects 0.
+- This checkpoint is not deployment approval. Remaining external P0 starts with finalized legal/publication information, then domain/TLS/secret store and the gated provider/Production checks in `OWNER_ACTIONS.md`.
+
 ## 2026-09-28 Production P0 remediation（最新）
 
 - Phase: **P0 code/config remediation complete; OWNER/external production actions blocked**. Production deploy, LIVE Stripe, Google submission, Gmail send and Production Supabase contact/write remain 0. Evidence: `docs/evidence/PRODUCTION_P0_REMEDIATION_20260928.md`.
 - PASS: production startup rejects TEST billing, loopback/HTTP/mismatched origins and incomplete AI/provider settings; frontend publication gate rejects incomplete legal/commercial settings; clean-commit immutable artifact builder; hardened Production A/B runner; supervised worker heartbeat/backoff/shutdown; independent runtime/maintenance monitoring; encrypted scheduled backup design; isolated restore proof.
 - PASS: disposable integration **32/0**, Backend **318/0** (including the separately gated loopback Production-runner exercise), compileall, pip check/audit, frontend Node tests **8/0**, TypeScript, ESLint, 22-route build, npm audit 0, diff check and candidate secret scan **380 text files / 0 findings**. The final build used an explicit non-routable HTTPS build origin; no deploy or network contact occurred.
 - PARTIAL: isolated worker reached the real local API scheduler and heartbeat, but the long-lived disposable DB contained 100 synthetic connected-Gmail fixtures; those company jobs failed and are reported as `degraded`, not promoted to real Google success. Gmail send calls were 0. Existing Gmail sync/retry/lock regression remains PASS.
-- BLOCKED/OWNER: reviewed clean commit and immutable artifact; public domain/TLS/secret store; Production Auth A/B runner separate approval; Google Restricted-scope verification/security assessment; Stripe LIVE objects and one-way DB promotion; external alert receiver/on-call and worker installation; final seller/legal values; encrypted off-host backup destination/key custody/retention; production deployment approval.
+- BLOCKED/OWNER: public domain/TLS/secret store; Production Auth A/B runner separate approval; Google Restricted-scope verification/security assessment; Stripe LIVE objects and one-way DB promotion; external alert receiver/on-call and worker installation; final seller/legal values; encrypted off-host backup destination/key custody/retention; production deployment approval.
 - Restore drill: fixed disposable source unchanged, encrypted-production-independent local logical restore PASS, 54 tables, fresh retained DB `pr_restore_e09da14aacd94cd4b19fdf2fcffba112`; no source/Production deletion.
-- Next: complete OWNER actions in `OWNER_ACTIONS.md` in order, create/review a clean checkpoint and immutable artifact, then request the separate Production Auth A/B execution approval. Do not replay v2.
+- Next: complete the remaining OWNER actions in `OWNER_ACTIONS.md` in order, beginning with final legal/publication values. Do not replay v2.
 
 ## 2026-09-28 Production deployment readiness audit（最新）
 

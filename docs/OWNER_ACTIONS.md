@@ -8,7 +8,7 @@
 4. **Stripe LIVE**: `STRIPE_LIVE_RELEASE_PACKAGE.md`に従いLIVE Price/key/webhook/tax/invoice/refundを準備する。実chargeなしのreadiness確認と、writer停止後のDB live promotionはそれぞれ別承認。
 5. **監視/worker**: HTTPS alert receiverと当番を決め、worker/maintenance/runtime-probe unitをinstall後、通知到達と外部missed-heartbeatを確認する。repositoryからは未登録。
 6. **backup**: encrypted off-host保存先、age key custody、保持/RPO/RTOを承認し、backup timerをenableする。最初のProduction artifact restoreはdisposable環境で証拠化する。
-7. **release artifact**: 現在の広い未commit差分をreviewしてclean commitにし、`scripts/build_release_artifact.py`でrepository外へartifact/manifestを作る。hashをchange ticketへ記録する。
+7. **release artifact — DONE 2026-09-28**: checkpoint `c0af7d5a19a001ff3cbba0e8ca8d5fe50282f5e7`からrepository外artifactを生成し、SHA-256とmanifestを`RELEASE_STATUS.md`および`docs/evidence/RELEASE_CHECKPOINT_20260928.md`へ記録済み。push/deployは未実施。
 8. **Production Auth A/B**: 上記基盤後に`run_production_auth_e2e.py`の別承認を出す。runnerはproject ref固定、実在A/B foreign IDs、直接UPDATE/DELETE、危険RPC、owner、API、cleanup/count deltaを検証する。本節は実行承認ではない。
 9. **Deploy**: 前8項目とrollback windowを確認した後だけ別途承認する。v2は再適用しない。LIVE charge/Gmail sendはさらに別承認。
 
