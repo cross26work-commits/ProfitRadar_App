@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 
 usage_records = ContextVar("ai_usage_records", default=None)
+cost_records = ContextVar("ai_cost_records", default=None)
 
 
 def record_usage(response):

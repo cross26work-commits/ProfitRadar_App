@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import { backendOrigin } from "./config/backend-origin";
+import { validatePublication } from "./config/publication";
+
+validatePublication(process.env);
 
 const nextConfig: NextConfig = {
   async rewrites() {

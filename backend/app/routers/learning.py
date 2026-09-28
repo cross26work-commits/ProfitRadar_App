@@ -11,8 +11,8 @@ router = APIRouter(prefix="/learning", tags=["learning"])
 def get_service() -> LearningService:
     try:
         return LearningService(LearningRepository(db=get_supabase_client()))
-    except SupabaseConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SupabaseConfigError:
+        raise HTTPException(status_code=503, detail="Database configuration unavailable") from None
 
 
 @router.post("/events")

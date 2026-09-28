@@ -1,0 +1,11 @@
+[Unit]
+Description=Profit Radar independent availability probe every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=profit-radar-runtime-probe.service
+
+[Install]
+WantedBy=timers.target

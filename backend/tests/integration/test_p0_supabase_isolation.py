@@ -309,6 +309,51 @@ def test_financials_real_jwt_roundtrip_isolation_and_version_conflict(environmen
         assert len(service.table("financial_record_history").select("id").eq("company_id", own["company_id"]).execute().data) == 1
 
 
+def test_confirmed_gross_profit_lifecycle_jst_and_tenant_boundary(environment):
+    api,service,actors=environment
+    _,a_headers,a=actors[0];_,b_headers,b=actors[1]
+    customer=service.table("profit_events").select("customer_id").eq("id",a["id"]).single().execute().data["customer_id"]
+    def new_event():
+        return service.table("profit_events").insert({"company_id":a["company_id"],"customer_id":customer,
+            "title":"Synthetic financial lifecycle","status":"open"}).execute().data[0]["id"]
+    def totals(headers,month):
+        response=api.get(f"/financials/summary?start=2031-{month}-01&end=2031-{month}-28",headers=headers)
+        assert response.status_code==200
+        return response.json()["totals"]
+    jan_a_before=totals(a_headers,"01");jan_b_before=totals(b_headers,"01")
+    event=new_event()
+    payload={"expected_version":0,"ordered_revenue":100000,"cost":0,
+        "occurred_at":"2031-01-15T10:00:00+09:00","confirmed_at":"2031-01-15T10:00:00+09:00"}
+    assert api.put(f"/financials/{event}",headers=a_headers,json=payload).status_code==200
+    assert totals(a_headers,"01")["gross_profit"]==(jan_a_before["gross_profit"] or 0)+100000
+    assert totals(b_headers,"01")==jan_b_before
+    assert api.get(f"/financials/{event}",headers=b_headers).status_code==404
+    assert api.put(f"/financials/{event}",headers=b_headers,json=payload).status_code==404
+    # One version can be saved once. A duplicate submit cannot double count.
+    assert api.put(f"/financials/{event}",headers=a_headers,json=payload).status_code==409
+    assert len(service.table("financial_record_history").select("id").eq("profit_event_id",event).execute().data)==1
+    changed={**payload,"expected_version":1,"ordered_revenue":150000}
+    assert api.put(f"/financials/{event}",headers=a_headers,json=changed).status_code==200
+    assert totals(a_headers,"01")["gross_profit"]==(jan_a_before["gross_profit"] or 0)+150000
+    assert len(service.table("financial_record_history").select("id").eq("profit_event_id",event).execute().data)==2
+    canceled={**payload,"expected_version":2,"ordered_revenue":None,"cost":None,"confirmed_at":None}
+    assert api.put(f"/financials/{event}",headers=a_headers,json=canceled).status_code==200
+    assert totals(a_headers,"01")==jan_a_before
+    # Legacy endpoint must reject an own-tenant write without touching either source.
+    old=service.table("profit_events").select("actual_profit,status").eq("id",event).single().execute().data
+    assert api.patch(f"/profit-events/{event}/actual-profit",headers=a_headers,json={"actual_profit":999}).status_code==409
+    assert service.table("profit_events").select("actual_profit,status").eq("id",event).single().execute().data==old
+    first=new_event();second=new_event()
+    for target,amount,confirmed in ((first,50000,"2031-01-31T23:59:00+09:00"),
+                                    (second,70000,"2031-02-01T00:00:00+09:00")):
+        body={**payload,"ordered_revenue":amount,"confirmed_at":confirmed}
+        assert api.put(f"/financials/{target}",headers=a_headers,json=body).status_code==200
+    jan=api.get("/financials/summary?start=2031-01-01&end=2031-01-31",headers=a_headers).json()["totals"]
+    feb=totals(a_headers,"02")
+    assert jan["gross_profit"]==(jan_a_before["gross_profit"] or 0)+50000
+    assert feb["gross_profit"]==70000
+
+
 def test_operator_recovery_owner_fencing_and_idempotency(environment):
     _, service, actors = environment
     company = actors[1][2]["company_id"]

@@ -742,7 +742,13 @@ def scheduled_sync(x_scheduler_secret: str | None = Header(default=None)):
     db=get_supabase_client()
     connections=db.table("gmail_connections").select("company_id").eq("status","connected").order("company_id").limit(100).execute().data or []
     ids=list(dict.fromkeys(row["company_id"] for row in connections))
-    return gmail_work.batch(ids,lambda cid: gmail_work.sync_company(db,cid,lambda: _check_replies({"max_events":50},cid)))
+    def work(cid):
+        recent=(db.table("gmail_company_sync_runs").select("status,started_at,finished_at")
+                .eq("company_id",cid).order("started_at",desc=True).limit(5).execute().data or [])
+        if not gmail_work.retry_due(recent):
+            return {"deferred":True}
+        return gmail_work.sync_company(db,cid,lambda: _check_replies({"max_events":50},cid))
+    return gmail_work.batch(ids,work)
 
 
 def _check_replies(payload, company_id):

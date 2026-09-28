@@ -33,7 +33,9 @@ if __name__ == '__main__':
     keys = local_credentials()
     env = dict(os.environ, P0_SUPABASE_TEST_URL='http://127.0.0.1:54321',
                P0_SUPABASE_EXPECTED_URL='http://127.0.0.1:54321', P0_ALLOW_FIXTURE_WRITES='CREATE_DISPOSABLE_FIXTURES',
-               P0_SUPABASE_TEST_ANON_KEY=keys['anon'], P0_SUPABASE_TEST_SERVICE_KEY=keys['service_role'])
+               P0_SUPABASE_TEST_ANON_KEY=keys['anon'], P0_SUPABASE_TEST_SERVICE_KEY=keys['service_role'],
+               FINAL_GATE_LOCAL_TEST='allow-disposable-fixtures',
+               PR_AUTH_E2E_LOCAL_TEST='ALLOW_DISPOSABLE_LOCAL')
     for selection in (['tests/integration'], []):
         result = subprocess.run([sys.executable, '-m', 'pytest', *selection, '-q', '-rs', '--tb=short'],
                                 cwd=ROOT / 'backend', env=env)

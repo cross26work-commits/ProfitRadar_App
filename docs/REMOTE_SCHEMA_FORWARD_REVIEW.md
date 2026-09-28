@@ -1,6 +1,36 @@
 # Remote schema forward 最終監査
+
+## 2026-09-17 最新: production v2適用・post-apply PASS（本人報告）
+
+対象project `zszmetqhksthduoxfvac` でv2 COMMIT成功、post-apply `FINAL=PASS`、既存20テーブルのpre/post件数一致、本番backup復元PASSとの報告を受けた。エージェントはremoteを再照会していない。以下の「v2未適用」「適用禁止」はpre-apply当時の履歴としてのみ残す。v2を再適用しない。次は別承認を要するproduction Authenticated A/B E2E。実行状態・再開地点は `docs/RELEASE_STATUS.md`。
+
+### 履歴: 2026-09-17 remote pre-apply PASS / v2未適用
+
+ユーザー提供のRemote Final Gate結果はFINAL=PASS。ACLとlegacy onboard_userはKNOWN_REMEDIABLEで、v2適用後の再検証が必要。以下の「STOP」や旧v1手順は当時の履歴であり現在の操作指示ではない。適用前にbackup/復元可能性、writer停止、対象project、v2 SHA256と直前のread-only gateを確認し、適用の明示承認を得る。現行の作業・結果・再開位置はRELEASE_STATUS.mdを参照。
+
+## 履歴: legacy列・ACL drift patchはSTOP
+
+最新の列とlegacy ACL対応は実DB未検証。remote4 policyのauthoritative snapshotは1016 bytes・指定SHA256で照合/統合済み。旧gmail_sync_runsは追加SELECT-only証拠によりglobal aggregate・0行と確定しtenant purgeから除外。company_idは追加せず、適用transactionで既知schema/0行を再確認する。Docker Engine利用不可によりAPPLY READYではない。
+最新の根拠・列別判断・194 passed/27 skippedと再開手順はREMOTE_SCHEMA_FORWARD_DRIFT_PATCH.mdを参照。以下のraw capture修正時のPASSは履歴であり今回のpatch合格を意味しない。
+
+## Raw capture受領・canonical exact hash確認（最新）
+
+ユーザー提示のCRLF→LFのみ正規化したSHA256は
+`12A8812B782D2D2FD1D41A9199F12199D0C3767E76D4CFBE649CCDB15D1B08D2`。
+ユーザー提供の847 bytesのraw captureを受領。Raw SHA256は
+`E426BDEA084DFD662E3C766EEEC3853588AE03AFFC16F7D7F885A576EC9F48AC`で確認済み。
+現在のdocs / preflight / v2 canonical本文はいずれも上記LF SHA256に一致。
+過去の`57C80FAF...`不一致はraw captureからexpected側だけ修正して解消。
+原本は変更せず、docs/create_company_and_profile_remote_capture.jsonにBase64で損失なく保持する。
+validatorは固定したraw長/raw hash/LF hashを先に検証する。synthetic fixtureから承認hashを生成しない。
+独立hash検査をvalidatorのDB作成前に追加。fixtureとexpectedの相互一致だけをremote exact証拠にはしない。
+v2 full validator PASS、identity rollback10件（空白1文字変更を含む）/その他rollback13件 PASS。
+推測による再インデントや比較緩和はしない。legacy・remote関数は変更せず、remote操作・commit/pushも未実施。
+今回のローカル検証DB: pr_forward_9eb22d19b2494f77be86cbee7e491286。過去の検証結果と区別する。
+今回再実行: SQL関連33 passed、local integration31 passed/0 skipped、Backend全体218 passed/0 skipped（SDK非推奨警告6件）、git diff --check PASS。
+
 2026-09-15 JST / Repo C:\Users\closs\ProfitRadar_App
-Branch arc/profit-radar-release-readiness / 現在HEAD 0ecc42c9c95ecc9a6af9c6f8d2bc5852c8c543e3
+Branch arc/profit-radar-release-readiness / 現在HEAD 435bb0ac368c32e50dda918863213b3cdbf69543
 検証対象は上記HEADに未コミットのv2差分を含む。checkpoint commitは未実行。
 
 ## 最新v2サマリー
@@ -119,7 +149,7 @@ NEXT_PUBLIC値とrewriteはbuildに反映されるため、本番URLで再build�
 新規psql sessionで、確認済みservice aliasを使用する例:
 ```powershell
 $env:PGCLIENTENCODING = 'UTF8'
-psql 'service=profit_radar_reviewed_remote' -X -v ON_ERROR_STOP=1 -f supabase/migrations/202609140001_remote_schema_forward.sql
+psql 'service=profit_radar_reviewed_remote' -X -v ON_ERROR_STOP=1 -f supabase/migrations/202609150001_remote_schema_forward_v2.sql
 ```
 PowerShellのGet-Content pipeによる再エンコードを避ける。SQL内にBEGIN/COMMITがあるため別の自動transaction wrapperで包まない。
 error/timeout/未知objectなら停止。connectionを閉じて未commit rollbackを確認し、原因を調査。既存制約を消して通過させない。

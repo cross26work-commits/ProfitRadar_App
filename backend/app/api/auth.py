@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from app.core.auth import get_current_user
 
@@ -7,16 +7,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/me")
 def current_user(user=Depends(get_current_user)):
-    try:
-        return {
-            "authenticated": True,
-            "user": user,
-        }
-    except Exception as error:
-        raise HTTPException(
-            status_code=500,
-            detail=f"/auth/me failed: {error}",
-        )
+    # Authentication errors are handled by the dependency.  Do not wrap this
+    # value-only response in an exception handler that could echo provider or
+    # token diagnostics to the client.
+    return {
+        "authenticated": True,
+        "user": user,
+    }
 
 
 @router.post("/login")

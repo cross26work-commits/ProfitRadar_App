@@ -168,11 +168,8 @@ export default function ReplyPage() {
                 : "同期完了。新しい返信はありません。"
             );
           }
-        } catch (err) {
-          console.error(
-            "Gmail reply sync failed:",
-            err
-          );
+        } catch {
+          console.error("Gmail reply sync failed");
 
           try {
             await reloadAll();
@@ -182,17 +179,9 @@ export default function ReplyPage() {
                 "Gmail同期に失敗しましたが、保存済みの返信を表示しています。"
               );
             }
-          } catch (reloadError) {
-            console.error(
-              "Reply reload failed:",
-              reloadError
-            );
-
-            setError(
-              reloadError instanceof Error
-                ? reloadError.message
-                : "返信情報の取得に失敗しました。"
-            );
+          } catch {
+            console.error("Reply reload failed");
+            setError("返信情報の取得に失敗しました。");
           }
         } finally {
           setSyncing(false);
@@ -203,9 +192,9 @@ export default function ReplyPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void reloadAll().catch((loadError) => {
+      void reloadAll().catch(() => {
         setError("返信情報の取得に失敗しました。");
-        console.error("Reply queue load failed", loadError);
+        console.error("Reply queue load failed");
       });
     }, 0);
     return () => window.clearTimeout(timer);
@@ -379,6 +368,13 @@ export default function ReplyPage() {
                   <div className="mt-6 border-t border-slate-200 pt-6">
                     <ReplyDraftForm
                       eventId={reply.profit_event_id}
+                      replyId={reply.id}
+                      fallbackCustomerId={reply.customer_id}
+                      fallbackCustomerName={reply.customer_name}
+                      fallbackCustomerEmail={reply.customer_email}
+                      fallbackEventTitle={
+                        reply.subject || reply.event_title
+                      }
                     />
                   </div>
                 ) : null}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Profit Radar frontend
+After=network-online.target profit-radar-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=profitradar
+WorkingDirectory=/opt/profit-radar/frontend
+EnvironmentFile=/etc/profit-radar/frontend.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=45
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

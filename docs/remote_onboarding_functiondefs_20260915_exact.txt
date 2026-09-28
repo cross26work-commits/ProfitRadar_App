@@ -99,31 +99,18 @@ begin
   if auth.uid() is null then
     raise exception 'Authentication required';
   end if;
-
   if nullif(trim(company_name), '') is null or nullif(trim(owner_name), '') is null then
     raise exception 'Company name and owner name are required';
   end if;
-
   if exists (select 1 from public.profiles where user_id = auth.uid()) then
     raise exception 'Profile already exists';
   end if;
 
   caller_email := coalesce(auth.jwt() ->> 'email', '');
-
   insert into public.companies(name, plan)
-    values (trim(company_name), 'free')
-    returning id into new_company_id;
-
+    values (trim(company_name), 'free') returning id into new_company_id;
   insert into public.profiles(user_id, company_id, name, full_name, email, role)
-    values (
-      auth.uid(),
-      new_company_id,
-      trim(owner_name),
-      trim(owner_name),
-      caller_email,
-      'owner'
-    );
-
+    values (auth.uid(), new_company_id, trim(owner_name), trim(owner_name), caller_email, 'owner');
   return new_company_id;
 end;
 $function$;

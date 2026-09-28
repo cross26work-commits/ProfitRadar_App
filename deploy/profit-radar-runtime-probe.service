@@ -1,0 +1,14 @@
+[Unit]
+Description=Profit Radar frontend, API and worker availability probe
+After=network-online.target profit-radar-sync.service
+
+[Service]
+Type=oneshot
+User=profitradar
+WorkingDirectory=/opt/profit-radar/backend
+EnvironmentFile=/etc/profit-radar/backend.env
+ExecStart=/opt/profit-radar/backend/venv/bin/python -m scripts.runtime_probe --notify
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

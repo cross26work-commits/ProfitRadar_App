@@ -57,7 +57,7 @@ export function LeadDetailView({lead}: {lead: Awaited<ReturnType<typeof getLeadD
       </FormSection>
 
       <FormSection title="実績">
-        <Link className="inline-block rounded-xl bg-indigo-700 px-4 py-3 text-white" href="/financials">売上・入金・原価を記録する</Link><p className="mt-2 text-sm">対象案件を選択し、受注額と入金・原価を区別して記録します。</p>
+        <Link className="inline-block rounded-xl bg-indigo-700 px-4 py-3 text-white" href={`/financials?event_id=${encodeURIComponent(lead.detail.id)}`}>この案件の売上・入金・原価を記録する</Link><p className="mt-2 text-sm">受注額と入金・原価を区別して記録します。</p>
       </FormSection>
 
       <RecentActivitySection

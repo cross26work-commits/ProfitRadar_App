@@ -20,9 +20,8 @@ export default function HomePage() {
   useEffect(() => {
     getHomeDashboard()
       .then(setDashboard)
-      .catch((err) => {
-        console.error("Dashboard load failed:", err);
-        setError(err instanceof Error ? err.message : "Dashboard load failed");
+      .catch(() => {
+        setError("データを取得できませんでした。接続状態を確認して再読み込みしてください。");
       });
   }, []);
 
@@ -33,9 +32,10 @@ export default function HomePage() {
           title="今日の利益"
           description="Dashboard APIの接続に失敗しました。"
         />
-        <pre className="whitespace-pre-wrap rounded-3xl border border-red-200 bg-red-50 p-6 text-sm font-bold text-red-700">
+        <p role="alert" className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm font-bold text-red-800">
           {error}
-        </pre>
+        </p>
+        <button type="button" className="relative z-10 rounded-xl bg-indigo-700 px-4 py-3 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700" onClick={() => window.location.reload()}>再読み込み</button>
       </PageStack>
     );
   }

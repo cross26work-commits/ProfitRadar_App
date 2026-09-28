@@ -6,6 +6,12 @@ from app.api import reply
 from app.services.ai_usage import measured_generation
 
 
+@pytest.fixture(autouse=True)
+def configured_generation_limit(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("AI_MONTHLY_GENERATION_LIMIT", "100")
+
+
 def test_get_without_snapshot_never_instantiates_ai(monkeypatch):
     from app.engines import conversation_intelligence,conversation_reply
     forbidden=Mock(side_effect=AssertionError("GET must not call AI"))
@@ -42,16 +48,20 @@ def test_failed_generation_records_elapsed_time():
 
 
 def test_generation_records_provider_counters_and_resets_context():
-    from app.services.ai_metrics import record_usage,usage_records
+    from decimal import Decimal
+    from app.services.ai_metrics import record_usage,usage_records,cost_records
     db=Mock(); db.rpc.return_value.execute.return_value=SimpleNamespace(data="run")
     def work():
         record_usage(SimpleNamespace(usage=SimpleNamespace(input_tokens=100,output_tokens=20)))
         record_usage(SimpleNamespace(usage=SimpleNamespace(input_tokens=150,output_tokens=30)))
+        cost_records.get().append(Decimal("0.00123"))
         return {}
     measured_generation(db,"a",work)
     record=db.table.return_value.update.call_args.args[0]
     assert record["input_tokens"]==250 and record["output_tokens"]==50
+    assert record["cost_usd"]=="0.00123"
     assert usage_records.get() is None
+    assert cost_records.get() is None
 
 
 def test_conversation_clients_disable_implicit_retries(monkeypatch):
@@ -62,3 +72,13 @@ def test_conversation_clients_disable_implicit_retries(monkeypatch):
         getattr(module,klass)()
         assert client.call_args.kwargs["timeout"]==30.0
         assert client.call_args.kwargs["max_retries"]==0
+
+
+def test_malformed_judgement_uses_marked_safe_fallback(monkeypatch):
+    from app.engines import ai_judge
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic")
+    monkeypatch.setattr(ai_judge, "_budgeted_text", lambda prompt: "not-json")
+    result = ai_judge.judge_email(subject="確認", body="内容を確認してください")
+    assert result["provider"] == "fallback"
+    assert result["conversation_ai_error"] == "AI_PROVIDER_INVALID_RESPONSE"
+    assert "not-json" not in result["reason"]

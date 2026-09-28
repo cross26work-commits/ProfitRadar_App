@@ -24,6 +24,19 @@ _backups/
 supabase/.temp/
 backup-*/
 .local-isolated/
+.local-isolated-*/
+
+# Read-only remote evidence is kept in reviewed JSON/TXT/SQL files. Browser
+# save-as copies and their asset folders can contain session-shaped values and
+# must never become release artifacts.
+docs/SHA256確認ファイル.html
+docs/SHA256確認ファイル_files/
+docs/raw prosrcファイル.html
+docs/raw prosrcファイル_files/
+docs/remote_onboarding_functiondefs_20260915_exact.txt.html
+docs/remote_onboarding_functiondefs_20260915_exact_folder_backup/
+docs/remote_onboarding_functiondefs_20260915.sql/
+docs/remote_schema_forward_oracle_snapshot_20260916_files/
 
 # Local SQLite databases
 *.db

@@ -19,7 +19,10 @@ def counters(db):
       "unresolved_sends":db.table("gmail_send_operations").select("operation_id",count="exact",head=True).in_("status",["unknown","sending"]),
       "pending_deletions":db.table("account_deletion_jobs").select("id",count="exact",head=True).neq("status","completed"),
       "reserved_ai":db.table("ai_budget_reservations").select("id",count="exact",head=True).eq("status","reserved"),
-      "old_company_locks":db.table("gmail_work_locks").select("company_id",count="exact",head=True).lt("acquired_at",threshold),
+        "old_company_locks":db.table("gmail_work_locks").select("company_id",count="exact",head=True).lt("acquired_at",threshold),
+        "recent_sync_failures":db.table("gmail_company_sync_runs").select("id",count="exact",head=True).eq("status","failed").gte("started_at",threshold),
+        "stuck_sync_runs":db.table("gmail_company_sync_runs").select("id",count="exact",head=True).eq("status","running").lt("started_at",threshold),
+        "recent_ai_failures":db.table("ai_usage_runs").select("id",count="exact",head=True).in_("status",["failed","fallback"]).gte("created_at",threshold),
     }
     result={}
     for name,query in queries.items():
@@ -32,12 +35,14 @@ def counters(db):
 def run(db,expected_url,apply_retention=False):
     if not os.environ.get("SUPABASE_URL") or expected_url.rstrip("/")!=os.environ["SUPABASE_URL"].rstrip("/"):
         raise ValueError("Target mismatch")
-    result={"event":"maintenance","counts":counters(db),"retention_applied":False}
+    result={"event":"maintenance","severity":"info","counts":counters(db),"retention_applied":False}
     if apply_retention:
         if os.getenv("RETENTION_SWEEP_APPROVED")!="true":raise ValueError("Retention policy approval required")
         result["purged_audit_jobs"]=db.rpc("purge_expired_deletion_audit",{}).execute().data
         result["retention_applied"]=True
     result["operator_review_required"]=any(result["counts"].values())
+    if result["operator_review_required"]:
+        result["severity"]="warning"
     return result
 
 
@@ -48,8 +53,8 @@ def notify(result):
         raise ValueError("Monitoring HTTPS destination required")
     # Fixed operational counts only. Never include rows, provider exceptions,
     # URLs, tickets, environment values, email or tokens in the payload.
-    payload={"event":"profit_radar_maintenance","review_required":bool(result["operator_review_required"]),
-             "counts":{key:int(result["counts"][key]) for key in ("unresolved_sends","pending_deletions","reserved_ai","old_company_locks")}}
+    payload={"event":"profit_radar_maintenance","severity":result.get("severity","warning"),"review_required":bool(result["operator_review_required"]),
+             "counts":{key:int(result["counts"][key]) for key in ("unresolved_sends","pending_deletions","reserved_ai","old_company_locks","recent_sync_failures","stuck_sync_runs","recent_ai_failures")}}
     try:
         response=requests.post(target,json=payload,timeout=5,allow_redirects=False)
         if not 200<=response.status_code<300:raise ValueError()
@@ -71,5 +76,5 @@ def main():
 if __name__=="__main__":
     try:main()
     except Exception:
-        print('{"event":"maintenance_failed","operator_review_required":true}')
+        print('{"event":"maintenance_failed","severity":"critical","operator_review_required":true}')
         raise SystemExit(1) from None

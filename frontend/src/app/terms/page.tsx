@@ -26,7 +26,7 @@ const sections = [
   {
     title: "第4条（メール等の外部サービス連携）",
     body: [
-      "本サービスでは、Gmail、Google Workspace、Outlook、Microsoft 365その他対応するメールサービスとの連携機能を提供する場合があります。",
+      "初期提供では、利用者が選択したGmailアカウントとの連携に対応します。",
       "外部サービスとの連携には、当該外部サービスの利用規約、仕様、制限その他の条件が適用される場合があります。",
       "外部サービスの仕様変更、障害、認証失効等により、本サービスの全部または一部が利用できなくなる場合があります。",
     ],
@@ -52,7 +52,7 @@ const sections = [
     title: "第7条（料金および支払い）",
     body: [
       "有料プランの料金、支払時期、支払方法その他の条件は、本サービス上の料金ページまたは申込画面に表示します。",
-      "無料プランと有料プランでは、利用できる機能または利用量に制限を設ける場合があります。",
+      "14日間の試用期間が終了しても自動課金はされません。有料利用には利用者による明示的な申込みが必要です。利用量の制限は申込画面に表示します。",
     ],
   },
   {
@@ -125,7 +125,7 @@ export default function TermsPage() {
             </p>
 
             <p className="mt-3 text-xs text-slate-500">
-              制定日：2026年9月6日
+              制定日：{process.env.TERMS_EFFECTIVE_DATE || "公開前に確定"}
             </p>
           </div>
 
@@ -152,7 +152,9 @@ export default function TermsPage() {
 
           <div className="mt-10 border-t border-slate-200 pt-6">
             <p className="text-xs leading-6 text-slate-500">
-              ※ 正式公開前に、運営者情報、料金条件、管轄その他の確定事項を反映します。
+              {process.env.SALES_PUBLICATION_APPROVED === "true"
+                ? `合意管轄: ${process.env.GOVERNING_COURT}`
+                : "※ 正式公開前に、運営者情報、料金条件、管轄その他の確定事項を反映します。"}
             </p>
           </div>
         </div>

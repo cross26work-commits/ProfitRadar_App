@@ -1,5 +1,7 @@
 ﻿import Link from "next/link";
 
+import { publicationReady } from "../../../config/publication";
+
 const sections = [
   {
     title: "1. 取得する情報",
@@ -31,7 +33,7 @@ const sections = [
   {
     title: "4. 外部サービスとの連携",
     body: [
-      "本サービスは、Google、Microsoftその他のメールまたは認証サービスと連携する場合があります。",
+      "初期提供では、利用者が許可したGoogleアカウントのGmailと連携します。",
       "外部サービスから取得する情報は、ユーザーが許可した権限の範囲内で取り扱います。",
       "外部サービスとの接続を解除した場合でも、法令上の保存義務またはサービス運営上必要な範囲で一定期間情報を保持する場合があります。",
     ],
@@ -100,6 +102,7 @@ const sections = [
 ];
 
 export default function PrivacyPage() {
+  const ready = publicationReady(process.env);
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-12">
       <div className="mx-auto w-full max-w-3xl">
@@ -152,7 +155,9 @@ export default function PrivacyPage() {
 
           <div className="mt-10 border-t border-slate-200 pt-6">
             <p className="text-xs leading-6 text-slate-500">
-              ※ 正式公開前に、事業者情報、問い合わせ窓口、委託先、国外移転、保存期間等の実際の運用内容を確定して反映します。
+              {ready
+                ? `問い合わせ: ${process.env.PRIVACY_CONTACT} / 通常データ保持: ${process.env.DATA_RETENTION_DAYS}日 / バックアップ保持: ${process.env.BACKUP_RETENTION_DAYS}日。国外移転・外部サービス: ${process.env.INTERNATIONAL_TRANSFER_DISCLOSURE}`
+                : "※ 正式公開前に、事業者情報、問い合わせ窓口、委託先、国外移転、保存期間等の実際の運用内容を確定して反映します。"}
             </p>
           </div>
         </div>

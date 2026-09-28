@@ -8,6 +8,7 @@ import os
 from contextvars import ContextVar
 from decimal import Decimal, ROUND_CEILING
 from fastapi import HTTPException
+from app.services.ai_metrics import cost_records
 
 budget_context = ContextVar("ai_budget_context", default=None)
 
@@ -68,4 +69,7 @@ def create_response(client, *, model, instructions, input, store=False, max_outp
         if not changed: raise ValueError()
     except Exception:
         raise HTTPException(503,"AI usage recording unavailable; reserved budget retained") from None
+    costs = cost_records.get()
+    if costs is not None:
+        costs.append((Decimal(actual_in) * rates_in + Decimal(actual_out) * rates_out) / Decimal(1000000))
     return response

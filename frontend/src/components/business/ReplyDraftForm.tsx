@@ -10,6 +10,11 @@ import { ApiError, apiGet, apiPost } from "@/lib/api";
 
 type ReplyDraftFormProps = {
   eventId: string | number;
+  replyId?: string;
+  fallbackCustomerId?: string | null;
+  fallbackCustomerName?: string;
+  fallbackCustomerEmail?: string;
+  fallbackEventTitle?: string;
 };
 
 type ReplyCustomer = {
@@ -77,19 +82,24 @@ function buildSubject(title?: string | null) {
 
 export function ReplyDraftForm({
   eventId,
+  replyId,
+  fallbackCustomerId,
+  fallbackCustomerName = "",
+  fallbackCustomerEmail = "",
+  fallbackEventTitle = "",
 }: ReplyDraftFormProps) {
   const [draft, setDraft] = useState("");
   const [customerId, setCustomerId] =
-    useState<string | null>(null);
+    useState<string | null>(fallbackCustomerId ?? null);
 
   const [customerName, setCustomerName] =
-    useState("");
+    useState(fallbackCustomerName);
 
   const [toEmail, setToEmail] =
-    useState("");
+    useState(fallbackCustomerEmail);
 
   const [subject, setSubject] =
-    useState("Re: Profit Radar");
+    useState(buildSubject(fallbackEventTitle));
 
   const [analysis, setAnalysis] =
     useState<ReplyAnalysis | null>(null);
@@ -119,6 +129,11 @@ export function ReplyDraftForm({
       setLoading(true);
       setMessage("");
 
+      setCustomerId(fallbackCustomerId ?? null);
+      setCustomerName(fallbackCustomerName);
+      setToEmail(fallbackCustomerEmail);
+      setSubject(buildSubject(fallbackEventTitle));
+
       try {
         const data =
           await apiGet<ReplyDraftResponse>(
@@ -140,15 +155,19 @@ export function ReplyDraftForm({
         );
 
         setCustomerId(
-          data.event?.customer_id ?? null
+          data.event?.customer_id ??
+            fallbackCustomerId ??
+            null
         );
 
         setCustomerName(
-          data.customer?.name || ""
+          data.customer?.name ||
+            fallbackCustomerName
         );
 
         setToEmail(
-          data.customer?.email || ""
+          data.customer?.email ||
+            fallbackCustomerEmail
         );
 
         setSendStatus(data.send_status || "");
@@ -171,10 +190,19 @@ export function ReplyDraftForm({
     }
 
     void loadDraft();
-  }, [eventId]);
+  }, [
+    eventId,
+    replyId,
+    fallbackCustomerId,
+    fallbackCustomerName,
+    fallbackCustomerEmail,
+    fallbackEventTitle,
+  ]);
 
   function requestSend() {
-    if (loading || sending || saving || sendStatus) return;
+    const sendBlocked =
+      sendStatus === "sending" || sendStatus === "unknown";
+    if (loading || sending || saving || sendBlocked) return;
     setMessage("");
 
     if (!toEmail) {
@@ -221,7 +249,9 @@ export function ReplyDraftForm({
   }
 
   async function sendDraft() {
-    if (sending || saving || sendStatus || !confirmOpen) return;
+    const sendBlocked =
+      sendStatus === "sending" || sendStatus === "unknown";
+    if (sending || saving || sendBlocked || !confirmOpen) return;
     setSending(true);
     setMessage("");
 
@@ -411,7 +441,8 @@ export function ReplyDraftForm({
           disabled={
             loading ||
             saving ||
-            Boolean(sendStatus) ||
+            (sendStatus === "sending" ||
+              sendStatus === "unknown") ||
             sending ||
             !draft.trim() ||
             !toEmail
@@ -441,7 +472,7 @@ export function ReplyDraftForm({
           }
         }}
       >
-        <dl className="space-y-2 text-sm"><dt>対象顧客</dt><dd>{customerName}</dd><dt>件名</dt><dd>{subject}</dd><dt>本文</dt><dd className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border p-3">{draft}</dd></dl>
+        <dl className="space-y-2 text-sm text-slate-900"><dt>対象顧客</dt><dd>{customerName}</dd><dt>件名</dt><dd>{subject}</dd><dt>本文</dt><dd className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border p-3">{draft}</dd></dl>
       </Dialog>
     </div>
   );

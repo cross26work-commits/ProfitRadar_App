@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { publicationReady } from "../../config/publication";
 
 export default function RootPage() {
   const seller = process.env.SELLER_NAME;
   const contact = process.env.SUPPORT_EMAIL;
-  const ready = Boolean(seller && contact && process.env.SALES_PUBLICATION_APPROVED === "true");
+  const ready = publicationReady(process.env);
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <nav className="mx-auto flex max-w-6xl items-center justify-between p-6"><span className="text-xl font-black">Profit Radar</span><Link className="rounded-lg border px-4 py-2" href="/login">ログイン</Link></nav>
@@ -18,7 +19,7 @@ export default function RootPage() {
         {[['1. 接続・確認','Gmailを接続し、対応が必要な案件と元メールを確認します。'],['2. 編集・確認送信','返信案を編集・保存。宛先と本文を確認した後にだけ送信します。'],['3. 結果を記録','見込みと確定した成果を分けて記録します。AIによる売上増加を保証するものではありません。']].map(([title,body])=><article key={title} className="rounded-2xl border bg-white p-6"><h2 className="font-bold">{title}</h2><p className="mt-3 leading-7 text-slate-600">{body}</p></article>)}
       </section>
       <section className="mx-auto max-w-3xl rounded-2xl border bg-white p-8"><h2 className="text-2xl font-bold">初期提供プラン</h2><p className="mt-5 text-4xl font-bold">19,800円<span className="text-base font-normal"> / 月（税込）</span></p><p className="mt-4 leading-7">1社1ユーザー・Gmail 1アカウント・日本語。最初の3社には初期設定を支援します。14日試用の終了だけでは自動課金しません。有料利用には別途、明示的な申込みが必要です。</p><p className="mt-4 text-sm text-slate-500">利用上限・保持期間・解約条件は公開前に確定し、契約画面で提示します。現在は準備中の条件を契約済みとは扱いません。</p></section>
-      <footer className="mx-auto max-w-6xl space-y-3 px-6 py-12 text-sm text-slate-600"><p>販売者: {seller || "公開前に入力が必要"} / 問い合わせ: {contact || "公開前に入力が必要"}</p><div className="flex gap-6"><Link href="/terms">利用条件</Link><Link href="/privacy">プライバシー</Link><Link href="/guide">利用ガイド</Link></div></footer>
+      <footer className="mx-auto max-w-6xl space-y-3 px-6 py-12 text-sm text-slate-600"><p>販売者: {seller || "公開前に入力が必要"} / 問い合わせ: {contact || "公開前に入力が必要"}</p><div className="flex flex-wrap gap-6"><Link href="/terms">利用条件</Link><Link href="/privacy">プライバシー</Link><Link href="/commercial-disclosure">特商法表記</Link><Link href="/guide">利用ガイド</Link></div></footer>
     </main>
   );
 }

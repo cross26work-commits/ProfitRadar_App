@@ -40,8 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const appProfile = await getCurrentAppProfile();
       setProfile(appProfile);
-    } catch (error) {
-      console.warn("Profile load failed:", error);
+    } catch {
+      console.warn("Profile load failed");
       setProfile(null);
     }
   }
@@ -68,8 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
         }
-      } catch (error) {
-        console.warn("Auth initialize failed:", error);
+      } catch {
+        console.warn("Auth initialize failed");
         if (mounted) {
           setSession(null);
           setProfile(null);

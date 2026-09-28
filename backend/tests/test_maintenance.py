@@ -6,7 +6,7 @@ from scripts.maintenance import run
 
 def database():
     db=Mock();q=Mock();db.table.return_value=q
-    for name in ('select','in_','neq','eq','lt'):getattr(q,name).return_value=q
+    for name in ('select','in_','neq','eq','lt','gte'):getattr(q,name).return_value=q
     q.execute.return_value=SimpleNamespace(count=0)
     return db
 
@@ -17,6 +17,8 @@ def test_maintenance_default_does_not_delete_or_call_provider(monkeypatch):
     assert not result['retention_applied'] and not result['operator_review_required']
     db.rpc.assert_not_called()
     for call in db.table.return_value.select.call_args_list:assert call.kwargs=={'count':'exact','head':True}
+    assert {'recent_sync_failures','stuck_sync_runs','recent_ai_failures'} <= result['counts'].keys()
+    assert db.table.return_value.gte.call_count==2
 
 
 def test_retention_requires_explicit_policy_and_target(monkeypatch):
@@ -35,7 +37,7 @@ def test_monitoring_emits_only_fixed_counts_without_secrets(monkeypatch):
     monkeypatch.setenv('MONITORING_WEBHOOK_URL','https://receiver.invalid/private-fixture-path')
     sender=Mock(return_value=SimpleNamespace(status_code=204))
     monkeypatch.setattr(maintenance.requests,'post',sender)
-    result={'operator_review_required':True,'counts':{key:1 for key in ('unresolved_sends','pending_deletions','reserved_ai','old_company_locks')},'private':'must-not-send'}
+    result={'operator_review_required':True,'counts':{key:1 for key in ('unresolved_sends','pending_deletions','reserved_ai','old_company_locks','recent_sync_failures','stuck_sync_runs','recent_ai_failures')},'private':'must-not-send'}
     maintenance.notify(result)
     payload=sender.call_args.kwargs['json']
     assert 'private' not in str(payload)

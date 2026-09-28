@@ -12,8 +12,8 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 def get_service() -> DashboardService:
     try:
         return DashboardService(DashboardRepository(db=get_supabase_client()))
-    except SupabaseConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SupabaseConfigError:
+        raise HTTPException(status_code=503, detail="Database configuration unavailable") from None
 
 
 @router.get("/summary")
@@ -24,5 +24,5 @@ def dashboard_summary(
 
     try:
         return service.get_summary(company_id=company_id)
-    except APIError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except APIError:
+        raise HTTPException(status_code=503, detail="Dashboard temporarily unavailable") from None

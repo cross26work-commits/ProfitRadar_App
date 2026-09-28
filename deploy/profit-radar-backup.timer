@@ -1,0 +1,11 @@
+[Unit]
+Description=Profit Radar daily encrypted logical backup
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 Asia/Tokyo
+Persistent=true
+RandomizedDelaySec=15min
+Unit=profit-radar-backup.service
+
+[Install]
+WantedBy=timers.target

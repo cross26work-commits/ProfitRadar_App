@@ -1,0 +1,15 @@
+[Unit]
+Description=Profit Radar encrypted logical database backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=profitradar
+WorkingDirectory=/opt/profit-radar/backend
+EnvironmentFile=/etc/profit-radar/backup.env
+ExecStart=/opt/profit-radar/backend/venv/bin/python -m scripts.scheduled_backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/backups/profit-radar

@@ -1,4 +1,60 @@
 # Profit Radar 公開・復旧・運営手順
+
+## 2026-09-28 P0 remediation運用（最新）
+
+- Production環境契約は `PRODUCTION_ENVIRONMENT.md` と `deploy/production-env.schema.json`。BackendはProduction TEST billing/localhost/HTTP/origin不一致を拒否し、readinessはDB billing modeも確認する。Frontendは`APP_ENV=production`時に法務/販売情報をfail-closedにする。
+- clean reviewed commitからのみ `scripts/build_release_artifact.py --repo <repo> --output-dir <repo外>` を実行し、commit/hash manifestをchange ticketへ保存する。現在のdirty tree自体はartifactではない。
+- services: `profit-radar-api`, `profit-radar-frontend`, `profit-radar-sync`, `profit-radar-maintenance`, `profit-radar-runtime-probe`; repositoryのunitはtemplateであり未install。workerはloopback `/health` `/ready`、batch transport backoff、SIGTERM停止を持つ。DB running lockは時間だけで解除しない。
+- Monitoring契約: `MONITORING_INCIDENT_RUNBOOK.md` と `deploy/monitoring-alerts.yaml`。receiver未設定ならnotify jobは失敗させ、external missed-heartbeatを必須とする。
+- Backup: `BACKUP_RECOVERY_RUNBOOK.md`。`scheduled_backup.py`はpg_dump→age→catalog verification→atomic artifact、retentionは自身のartifact名だけ。`profit-radar-backup.timer`はstorage/key/retention承認前にenableしない。
+- Legal/Google/Stripe: `commercial-disclosure`, `privacy`, `terms`, `GOOGLE_OAUTH_RELEASE_PACKAGE.md`, `STRIPE_LIVE_RELEASE_PACKAGE.md`。owner値、審査、LIVE objectは外部Gateであり今回未実施。
+- Current local proof: integration 32/0, Backend 318/0, frontend 8/0 + type/lint/22-route build, dependency audits, restore drill and candidate secret scan 380/0 PASS. Production contact/deploy/provider action 0。詳細は`RELEASE_STATUS.md`先頭とP0 evidence。
+
+## 2026-09-28 Production readiness hold point
+
+The current authoritative decision is `BLOCKED / NOT READY`; see `docs/evidence/PRODUCTION_DEPLOYMENT_READINESS_AUDIT_20260928.md` and the first section of `RELEASE_STATUS.md`. AI isolated generation and Stripe TEST E2E are PASS, but Production deployment is not authorized.
+
+Do not deploy until all current P0 owner actions are evidenced: immutable reviewed release artifact; selected public frontend/API hosting with DNS/TLS/CORS/secret store; current Production Auth A/B proof; Google Restricted-scope approval/security-assessment decision; Stripe LIVE objects/webhook and approved one-way billing promotion; enabled worker/maintenance/alert heartbeat; finalized legal/contact/retention/refund disclosures; and recurring backup/restore operations. V2 is already owner-reported as applied and must not be replayed.
+
+The final controlled deployment must use the exact reviewed artifact, inject secrets only from the server-side store, check `/health` and `/ready`, start the worker/maintenance supervision, verify alert delivery, and run only the approved non-customer smoke. Roll back the application artifact on health/readiness failure; do not reverse the committed v2 schema or delete Production rows. Production deploy, LIVE charge and Gmail send still require their own explicit approvals.
+
+## 2026-09-28 AI isolated real-generation Gate（最新）
+
+- Evidenceは `docs/evidence/AI_ISOLATED_REAL_GENERATION_20260928.md`。隔離Supabaseのラベル/loopbackを確認してから `backend/scripts/run_isolated_ai_restart.py` を使用する。
+- ランナーは正規JWTでBackend `/ai-judge/judge` を通し、実Provider応答、application validation、usage/cost/budget、cleanupとpre/post countを検証する。Production URL・Live Stripe・非loopbackは起動前拒否。Gmail/Stripe/migration/deployを呼ばない。
+- 実Provider生成は費用を伴うため、既存PASSを理由なく再実行しない。失敗時は自動再試行せず、結果不明の予約を保持し、隔離fixtureだけをoperator review後に回収する。
+- 2026-09-28実績: final generation PASS、failure/guard 34、integration 32/0、Backend 288/0。後続のStripe TEST E2Eも同日にPASSしたため、次はProduction Deployment Readiness Audit。AI gateのPASSを理由なく再生成しない。
+
+## 2026-09-27 P0 Stripe/AI隔離手順（現行）
+
+1. Dockerは`desktop-linux`、既存projectは`profit-radar-disposable`、APIは`http://127.0.0.1:54321`、DBは`127.0.0.1:54322`であることを確認する。prune、`down -v`、volume削除、`.local-isolated`再作成、Production link/db pushは禁止。
+2. AI isolated restartはrepo rootから `backend/venv/Scripts/python.exe backend/scripts/run_isolated_ai_restart.py`。ランナーは非loopback Supabase、Production URL、Live Stripe、非`sk_test_` keyを事前拒否し、repo `.env`全体をchildへ読み込まない。`.local-isolated/ai-e2e.env`はgitignore対象かつlocal ACL制限対象。secret、prompt、生成本文は標準出力へ出さない。
+3. 合格条件は既存Backend停止→新規isolated process→`/health`→`/ready`→provider-backed reply 1回→`ai_usage_runs` token/cost→`ai_budget_reservations` actual token/company cap→generation limitの順にすべてPASSし、検証後processが停止すること。2026-09-27実績はPASS、generation_calls=1、Production contact=0。
+4. Stripe TESTは `STRIPE_SECRET_KEY=sk_test_*`、`STRIPE_WEBHOOK_SECRET=whsec_*`、`STRIPE_PRICE_ID=price_*` を隔離secret storeからのみ注入する。`STRIPE_MODE=test`を固定。Price API応答がJPY 19,800、month、interval_count=1、tax_behavior=inclusiveでなければ停止する。14日trialはアプリ管理で、自動課金しない。
+5. Webhookは`/billing/webhook`、successは`<FRONTEND_URL>/settings/plan?checkout=complete`、cancelは`<FRONTEND_URL>/settings/plan?checkout=cancelled`。credential投入後にcheckout→TEST payment→署名Webhook→DB subscription→entitlement→duplicate webhook→cancel→cancellation webhookを実施する。Live key / Live charge / Production接続は禁止。
+6. 回帰は`backend/venv/Scripts/python.exe backend/scripts/run_local_regression.py --allow-disposable-fixtures`。2026-09-28 Stripe E2E後の実績はintegration 32/0 skipped、全Backend 288 passed。
+7. Vector loggingのDocker endpoint `Network unreachable`はDB/Auth/API E2Eへ影響しない非P0。Stripe/AI gate後に別途調査し、P0合格を偽装するため設定を緩めない。
+8. Stripe TEST E2Eは `start_isolated_stripe_backend.py`、`prepare_isolated_stripe_e2e.py`、`verify_isolated_stripe_e2e.py`、`verify_isolated_stripe_failure.py` を使う。CLI 1.52.0のlistenerは `--events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted` を指定する。listener停止中に発生済みのTESTイベントは決済を繰り返さず、Stripe TESTから取得した実イベントを同じ署名検証endpointへ一度だけ復旧投入する。
+9. 完了後はTEST subscription/customerを削除し、未払いSessionをexpireし、account-deletion RPCでlocal fixtureを削除する。tracked table countsをpre-runへ戻す。listener signing secretとSession URLは `.local-isolated` 外へ出さず、deploymentへ転用しない。
+
+## 2026-09-18 Release Candidate handoff（現行）
+
+- 本人報告ではv2本番適用、post-apply、既存件数、backup復元、Authenticated A/B E2E、Gmailのテスト用E2Eが成功済み。V1/V2再適用・既存E2E案件への追加送信はしない。記録は `RELEASE_STATUS.md` を優先。
+- AIはhost/secret storeで `OPENAI_API_KEY`、3つの `OPENAI_MODEL_*`、`AI_MODEL_MAX_RATES_JSON`、`AI_COMPANY_MONTHLY_TOKENS`、`AI_COMPANY_MONTHLY_USD`、`AI_MONTHLY_GENERATION_LIMIT` を永続設定する。値はFrontendに置かない。本番起動は欠落・未知model・不正範囲を拒否する。再起動後の実生成を未実施の間、AI本番GateをPASSにしない。
+- 2026-09-18に確認したOpenAI公式価格は[Terra](https://developers.openai.com/api/docs/models/gpt-5.6-terra)入力2/出力12 USD、[Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol)入力4/出力20 USD（各100万token）。Sol価格は期間限定と明記されている。`AI_MODEL_MAX_RATES_JSON` は請求価格そのものではなく保守的な最大予約単価で、運営者が最新単価以上を再確認して設定する。会社別月token/USD/生成回数の上限は契約・採算判断後に承認する。空欄のまま本番起動しない。
+- `scripts.maintenance` は直近15分の会社別Gmail同期失敗と15分超のrunningも件数で確認する。`--notify` は承認されたHTTPS通知先だけ。API `/health` と `/ready`、workerプロセス、maintenance timer、通知先の到達性と独立heartbeatを公開前に確認する。worker自身のログだけではホスト停止を検知できない。
+- 定期同期は接続中の会社ごとに前回の連続失敗を参照し、5分から最大60分まで指数的に再試行を遅らせる。他社は継続し、レスポンスの `deferred` 件数で確認する。`running` のままの会社は時間だけで解錠・再実行しない。15分超はmaintenance通知から運営者が `OPERATOR_RECOVERY.md` に従って状態確認する。
+- Stripe TEST E2Eは2026-09-28に隔離環境でPASS。Checkout→TEST payment→署名Webhook→subscription/entitlement→重複/順序逆転/invalid/unknown/provider error→解約、および別Checkoutの実declineとcleanupを確認した。Evidenceは `docs/evidence/STRIPE_TEST_E2E_20260928.md`。Live設定・実課金は別承認まで禁止。
+- 2026-09-28: dependency security gateで `anyio` を4.14.1から4.14.2へ最小更新。更新後は `pip check`、`pip-audit`（既知脆弱性0）、compileall、隔離integration 32件、全Backend 286件、Stripe/AI safety 58件を確認。再現時も4.15.x等へ無関係なjumpをせず、`backend/requirements.txt` のpinとvenvを同時に更新して全回帰する。
+- UIの架空fixture PC/390px確認は実Auth/DB/Google/Stripeの合格証拠ではない。スクリーンショットは `docs/screenshots/release-20260918-*`。本番URL/DNS/HTTPS、法務最終確認、Google公開審査とmonitoring当番が確定するまで販売ページの準備中表示を維持する。
+
+## 2026-09-17 最新
+
+現在の唯一の再開位置は `RELEASE_STATUS.md`。2026-09-17に本人は project `zszmetqhksthduoxfvac` へのv2 COMMIT成功、post-apply FINAL=PASS、既存20テーブル件数一致、本番backup復元PASSを報告した。v2を再適用しない。次の境界は production Authenticated A/B E2E の別承認であり、`backend/scripts/run_production_auth_e2e.py` は承認前に実行しない。以下の旧pre-apply/Docker不足/skip数/v1記述は履歴であって現行操作指示ではない。
+
+適用後は `supabase/remote_schema_forward_post_apply.sql` と同じ `supabase/remote_schema_forward_row_counts.sql` の適用前後結果を確認。Post-apply metadata PASSだけで実AuthやGoogle/Stripe E2Eを合格にしない。
+
+## 以下は過去時点の記録
 ## 2026-09-15 更新（以下の旧環境記述より優先）
 
 remoteは未接続・未適用。現在は適用禁止。承認、preflight、backup、適用後確認をREMOTE_SCHEMA_FORWARD_REVIEW.mdで管理する。

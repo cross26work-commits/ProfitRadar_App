@@ -109,31 +109,18 @@ begin
   if auth.uid() is null then
     raise exception 'Authentication required';
   end if;
-
   if nullif(trim(company_name), '') is null or nullif(trim(owner_name), '') is null then
     raise exception 'Company name and owner name are required';
   end if;
-
   if exists (select 1 from public.profiles where user_id = auth.uid()) then
     raise exception 'Profile already exists';
   end if;
 
   caller_email := coalesce(auth.jwt() ->> 'email', '');
-
   insert into public.companies(name, plan)
-    values (trim(company_name), 'free')
-    returning id into new_company_id;
-
+    values (trim(company_name), 'free') returning id into new_company_id;
   insert into public.profiles(user_id, company_id, name, full_name, email, role)
-    values (
-      auth.uid(),
-      new_company_id,
-      trim(owner_name),
-      trim(owner_name),
-      caller_email,
-      'owner'
-    );
-
+    values (auth.uid(), new_company_id, trim(owner_name), trim(owner_name), caller_email, 'owner');
   return new_company_id;
 end;
 $canonical_body$;
@@ -167,6 +154,78 @@ BEGIN
 END $v2_effective_acl$;
 
 -- Required existing columns: actual app/RPC dependencies, not guessed remote state.
+-- Forward-safe nullable compatibility columns. No defaults, backfills or guessed tenant IDs.
+-- User-provided SELECT-only evidence: empty legacy/global aggregate, NOT tenant data.
+-- SHARE lock prevents concurrent inserts and schema changes until COMMIT. No ACL changes.
+DO $global_sync_evidence$
+BEGIN
+ LOCK TABLE public.gmail_sync_runs IN SHARE MODE;
+ IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid='public.gmail_sync_runs'::regclass AND relkind='r') THEN
+  RAISE EXCEPTION 'FORWARD: global sync schema mismatch';
+ END IF;
+ IF EXISTS(
+WITH expected(name,typ,nn,def) AS (VALUES ('id','uuid',true,'gen_random_uuid()'),
+ ('status','text',true,NULL),
+ ('started_at','timestamptz',true,'now()'),
+ ('finished_at','timestamptz',false,NULL),
+ ('company_count','int4',true,'0'),
+ ('success_count','int4',true,'0'),
+ ('failure_count','int4',true,'0'),
+ ('detected_reply_count','int4',true,'0'),
+ ('error_summary','jsonb',true,'''[]''::jsonb')),
+ actual AS (
+ SELECT a.attname::text AS name,t.typname::text AS typ,a.attnotnull AS nn,
+ pg_get_expr(d.adbin,d.adrelid) AS def,a.atttypmod,a.attidentity,a.attgenerated
+ FROM pg_attribute a JOIN pg_type t ON t.oid=a.atttypid
+ LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+ WHERE a.attrelid='public.gmail_sync_runs'::regclass AND a.attnum>0 AND NOT a.attisdropped)
+ SELECT 1 FROM expected e FULL JOIN actual a USING(name)
+ WHERE e.name IS NULL OR a.name IS NULL OR e.typ IS DISTINCT FROM a.typ
+ OR e.nn IS DISTINCT FROM a.nn OR e.def IS DISTINCT FROM a.def
+ OR a.atttypmod<>-1 OR a.attidentity<>'' OR a.attgenerated<>''
+ ) THEN RAISE EXCEPTION 'FORWARD: global sync schema mismatch'; END IF;
+ IF EXISTS(SELECT 1 FROM public.gmail_sync_runs) THEN
+  RAISE EXCEPTION 'FORWARD: global sync rows require review';
+ END IF;
+END $global_sync_evidence$;
+DO $legacy_columns$
+DECLARE r record; a pg_attribute%rowtype; d text;
+BEGIN
+ FOR r IN SELECT * FROM (VALUES
+ ('profit_events','description','text'),
+ ('profit_events','neglected_days','int4'),
+ ('profit_events','recoverable_profit','int8')) v(t,c,typ) LOOP
+  IF NOT EXISTS(SELECT 1 FROM pg_class WHERE oid=to_regclass('public.'||r.t) AND relkind='r'
+    AND relowner IN ('postgres'::regrole,'supabase_admin'::regrole)) THEN
+   RAISE EXCEPTION 'FORWARD: legacy column table owner/kind mismatch';
+  END IF;
+  SELECT * INTO a FROM pg_attribute WHERE attrelid=to_regclass('public.'||r.t) AND attname=r.c AND attnum>0 AND NOT attisdropped;
+  IF NOT FOUND THEN
+   EXECUTE format('ALTER TABLE public.%I ADD COLUMN %I %s',r.t,r.c,r.typ);
+  ELSE
+   SELECT pg_get_expr(adbin,adrelid) INTO d FROM pg_attrdef WHERE adrelid=a.attrelid AND adnum=a.attnum;
+   IF a.atttypid<>to_regtype(r.typ) OR a.atttypmod<>-1 OR a.attnotnull OR d IS NOT NULL OR a.attidentity<>'' OR a.attgenerated<>'' THEN
+    RAISE EXCEPTION 'FORWARD: legacy column contract mismatch %.%',r.t,r.c;
+   END IF;
+  END IF;
+ END LOOP;
+END $legacy_columns$;
+-- Exact ownership contract; never repair unknown drift. Lock survives to COMMIT.
+DO $owner_contract$
+BEGIN
+ LOCK TABLE public.companies IN SHARE MODE;
+ IF NOT EXISTS(
+  SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+  LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+  WHERE c.oid='public.companies'::regclass AND c.relkind='r'
+   AND a.attname='owner_user_id' AND a.attnum>0 AND NOT a.attisdropped
+   AND a.atttypid='pg_catalog.uuid'::regtype AND a.atttypmod=-1
+   AND NOT a.attnotnull AND a.attidentity='' AND a.attgenerated=''
+   AND pg_get_expr(d.adbin,d.adrelid)='auth.uid()'
+ ) THEN
+  RAISE EXCEPTION 'FORWARD: prerequisite column/type mismatch';
+ END IF;
+END $owner_contract$;
 DO $preflight$
 DECLARE r record; actual oid;
 BEGIN
@@ -217,7 +276,6 @@ BEGIN
  ('companies','name','text'),
  ('companies','plan','text'),
  ('companies','created_at','timestamptz'),
- ('companies','updated_at','timestamptz'),
  ('company_billing','company_id','uuid'),
  ('company_billing','trial_ends_at','timestamptz'),
  ('company_billing','status','text'),
@@ -274,12 +332,9 @@ BEGIN
  ('gmail_send_operations','created_at','timestamptz'),
  ('gmail_send_operations','updated_at','timestamptz'),
  ('gmail_sync_runs','id','uuid'),
- ('gmail_sync_runs','company_id','uuid'),
  ('gmail_sync_runs','status','text'),
  ('gmail_sync_runs','started_at','timestamptz'),
  ('gmail_sync_runs','finished_at','timestamptz'),
- ('gmail_sync_runs','error_code','text'),
- ('gmail_sync_runs','detected_count','int4'),
  ('gmail_work_locks','company_id','uuid'),
  ('gmail_work_locks','owner_id','uuid'),
  ('gmail_work_locks','purpose','text'),
@@ -315,7 +370,6 @@ BEGIN
  ('profiles','full_name','text'),
  ('profiles','role','text'),
  ('profiles','created_at','timestamptz'),
- ('profiles','updated_at','timestamptz'),
  ('profiles','name','text'),
  ('profit_events','id','uuid'),
  ('profit_events','company_id','uuid'),
@@ -393,6 +447,57 @@ BEGIN
 END $preflight$;
 
 -- These existing RPCs are prerequisites, NOT replaced by this migration.
+-- Authoritative remote snapshot: 1016 bytes, SHA256 DF734F55B6379D0C2983D658AA15E6D93A667EFE5200A13B6B4199CB9905DCC2.
+-- Policies are compared, never modified. Exact fields/roles/expressions required.
+DO $remote_policy_oracle$
+DECLARE actual jsonb;
+BEGIN
+ SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.tablename,p.policyname),'[]'::jsonb) INTO actual
+ FROM pg_policies p WHERE schemaname='public' AND tablename IN
+ ('companies','profiles','customers','messages','profit_events','timeline','reply_logs','ai_judgements','learning_logs','calendar_events','gmail_connections');
+ IF actual IS DISTINCT FROM $policy_oracle$[{"cmd":"INSERT","qual":null,"roles":["authenticated"],"tablename":"companies","permissive":"PERMISSIVE","policyname":"companies_insert_own","schemaname":"public","with_check":"(owner_user_id = auth.uid())"},{"cmd":"SELECT","qual":"((owner_user_id = auth.uid()) OR (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.company_id = companies.id) AND (profiles.user_id = auth.uid())))))","roles":["authenticated"],"tablename":"companies","permissive":"PERMISSIVE","policyname":"companies_select_member_or_owner","schemaname":"public","with_check":null},{"cmd":"SELECT","qual":"(user_id = auth.uid())","roles":["authenticated"],"tablename":"profiles","permissive":"PERMISSIVE","policyname":"profiles_select_own","schemaname":"public","with_check":null},{"cmd":"UPDATE","qual":"(user_id = auth.uid())","roles":["authenticated"],"tablename":"profiles","permissive":"PERMISSIVE","policyname":"profiles_update_own","schemaname":"public","with_check":null}]$policy_oracle$::jsonb THEN
+  RAISE EXCEPTION 'FORWARD: unknown legacy policy snapshot';
+ END IF;
+END $remote_policy_oracle$;
+DO $legacy_acl$
+DECLARE t text; obj oid; own oid; cols text; p record; expected text; priv text; role_name text;
+BEGIN
+ FOREACH t IN ARRAY ARRAY['companies','profiles','customers','messages','profit_events','timeline','reply_logs','ai_judgements','learning_logs','calendar_events','gmail_connections'] LOOP
+  SELECT oid,relowner INTO obj,own FROM pg_class WHERE oid=to_regclass('public.'||t) AND relkind='r' AND relrowsecurity;
+  IF obj IS NULL OR own NOT IN ('postgres'::regrole,'supabase_admin'::regrole) THEN
+   RAISE EXCEPTION 'FORWARD: legacy RLS/owner mismatch %',t;
+  END IF;
+  IF EXISTS(SELECT 1 FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) x WHERE c.oid=obj
+     AND x.grantee NOT IN (0,own,'postgres'::regrole,'supabase_admin'::regrole,'anon'::regrole,'authenticated'::regrole,'service_role'::regrole))
+  OR EXISTS(SELECT 1 FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) x WHERE a.attrelid=obj
+     AND x.grantee NOT IN (0,own,'postgres'::regrole,'supabase_admin'::regrole,'anon'::regrole,'authenticated'::regrole,'service_role'::regrole)) THEN
+   RAISE EXCEPTION 'FORWARD: unexpected legacy grantee %',t;
+  END IF;
+  IF EXISTS(SELECT 1 FROM pg_depend d JOIN pg_rewrite w ON w.oid=d.objid JOIN pg_class v ON v.oid=w.ev_class
+    WHERE d.refobjid=obj AND v.relkind IN ('v','m')) THEN RAISE EXCEPTION 'FORWARD: legacy dependent view requires review'; END IF;
+  EXECUTE format('REVOKE ALL ON TABLE public.%I FROM PUBLIC,anon,authenticated',t);
+  SELECT string_agg(quote_ident(attname),',') INTO cols FROM pg_attribute WHERE attrelid=obj AND attnum>0 AND NOT attisdropped;
+  EXECUTE format('REVOKE SELECT(%s),INSERT(%s),UPDATE(%s),REFERENCES(%s) ON TABLE public.%I FROM PUBLIC,anon,authenticated',cols,cols,cols,cols,t);
+  IF t IN ('companies','profiles') THEN EXECUTE format('GRANT SELECT ON TABLE public.%I TO authenticated',t); END IF;
+  FOREACH role_name IN ARRAY ARRAY['anon','authenticated'] LOOP
+   FOREACH priv IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','TRIGGER','REFERENCES'] LOOP
+    IF has_table_privilege(role_name,obj,priv) IS DISTINCT FROM (role_name='authenticated' AND t IN ('companies','profiles') AND priv='SELECT') THEN
+     RAISE EXCEPTION 'FORWARD: inherited legacy privilege remains %',t;
+    END IF;
+   END LOOP;
+   IF current_setting('server_version_num')::int>=170000 AND has_table_privilege(role_name,obj,'MAINTAIN') THEN
+    RAISE EXCEPTION 'FORWARD: inherited legacy MAINTAIN remains %',t;
+   END IF;
+   IF has_any_column_privilege(role_name,obj,'INSERT,UPDATE,REFERENCES')
+    OR (NOT(role_name='authenticated' AND t IN ('companies','profiles')) AND has_any_column_privilege(role_name,obj,'SELECT')) THEN
+    RAISE EXCEPTION 'FORWARD: inherited legacy column privilege remains %',t;
+   END IF;
+  END LOOP;
+  FOREACH priv IN ARRAY ARRAY['SELECT','INSERT','UPDATE','DELETE'] LOOP
+   IF NOT has_table_privilege('service_role',obj,priv) THEN RAISE EXCEPTION 'FORWARD: required legacy service privilege missing %',t; END IF;
+  END LOOP;
+ END LOOP;
+END $legacy_acl$;
 DO $rpc_preflight$
 DECLARE sig text; f pg_proc%rowtype;
 BEGIN
@@ -871,6 +976,7 @@ SELECT pg_temp.forward_function('request_account_deletion',$ddl$
 create function public.request_account_deletion(p_user_id uuid,p_retention_days integer) returns jsonb language plpgsql security definer set search_path=pg_catalog,pg_temp as $$
 declare profile public.profiles%rowtype; job public.account_deletion_jobs%rowtype;
 begin
+ -- Unknown legacy ownership is not evidence of successful per-company erasure.
  if p_retention_days is null or p_retention_days<1 or p_retention_days>3650 then raise exception 'retention configuration required'; end if;
  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text,0));
  select * into job from public.account_deletion_jobs where user_id=p_user_id;
@@ -899,7 +1005,7 @@ begin
  -- Explicit known children only. Unexpected foreign keys fail and roll back all DB deletion.
  foreach t in array array['financial_payments','financial_record_history','financial_records','gmail_inbound_receipts','gmail_sync_cursors',
   'reply_drafts','gmail_send_operations','conversation_analysis_snapshots','ai_budget_reservations','ai_usage_runs',
-  'gmail_company_sync_runs','gmail_sync_runs','operation_recovery_audit','billing_webhook_events','billing_checkout_attempts',
+  'gmail_company_sync_runs','operation_recovery_audit','billing_webhook_events','billing_checkout_attempts',
   'company_billing','timeline','learning_logs','ai_judgements','calendar_events','reply_logs','profit_events','messages','customers','profiles','gmail_work_locks'] loop
   execute format('delete from public.%I where company_id=$1',t) using job.company_id;
  end loop;

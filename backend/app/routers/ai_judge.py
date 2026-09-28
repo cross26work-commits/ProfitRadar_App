@@ -28,7 +28,7 @@ def judge_and_save(
             repository=AIJudgementRepository(db=get_supabase_client())
         )
         return service.judge_and_save(company_id=company_id, payload=payload)
-    except SupabaseConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except SupabaseConfigError:
+        raise HTTPException(status_code=503, detail="Database configuration unavailable") from None
     except APIError:
         raise HTTPException(status_code=503, detail="Analysis storage temporarily unavailable") from None

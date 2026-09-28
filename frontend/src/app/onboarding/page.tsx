@@ -91,12 +91,8 @@ export default function OnboardingPage() {
       router.replace("/dashboard");
       router.refresh();
 
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "初期設定に失敗しました。"
-      );
+    } catch {
+      setErrorMessage("初期設定を確認できません。再読み込みして登録状態を確認してください。");
 
     } finally {
       setIsSubmitting(false);

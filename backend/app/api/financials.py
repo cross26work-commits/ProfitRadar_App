@@ -70,9 +70,15 @@ def with_payment_entries(records,payments):
                       for p in payments if p.get("voided_at") is None]]
 
 
+def period_bounds(start:date|None,end:date|None,now:datetime|None=None):
+    """Default summary is current month-to-date in Japan, not only today."""
+    today=(now or datetime.now(JST)).astimezone(JST).date()
+    return start or today.replace(day=1), end or today
+
+
 @router.get("/summary")
 def summary(start:date|None=None,end:date|None=None,company_id:str=Depends(get_current_company_id)):
-    start=start or datetime.now(JST).date();end=end or start
+    start,end=period_bounds(start,end)
     if end<start or (end-start).days>366:raise HTTPException(422,"Period must be within 367 days")
     db=get_supabase_client()
     rows=with_payment_entries(all_company_rows(db,"financial_records",company_id,"profit_event_id"),all_company_rows(db,"financial_payments",company_id,"id"))

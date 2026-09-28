@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date,datetime,timezone
 import pytest
 from pydantic import ValidationError
-from app.api.financials import aggregate,FinancialInput
+from app.api.financials import aggregate,FinancialInput,period_bounds
 from app.api.financials import with_payment_entries, PaymentInput
 
 
@@ -13,6 +13,12 @@ def test_jst_midnight_and_unknown_cost():
     rows[0]["cost"]=30
     assert aggregate(rows,day,day)["gross_profit"]==70
     assert aggregate([],day,day)["ordered_revenue"] is None
+
+
+def test_default_period_is_jst_month_to_date_even_at_utc_boundary():
+    instant=datetime(2031,1,31,15,0,tzinfo=timezone.utc)
+    assert period_bounds(None,None,instant)==(date(2031,2,1),date(2031,2,1))
+    assert period_bounds(date(2031,1,1),date(2031,1,31),instant)==(date(2031,1,1),date(2031,1,31))
 
 
 def test_financial_input_forbids_spoofed_actor_and_undated_revenue():

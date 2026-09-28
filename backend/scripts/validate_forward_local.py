@@ -4,6 +4,7 @@ Run from backend with --allow-disposable-fixtures. No remote URL option, keys,
 provider calls, migrations history repairs, or customer rows in the output.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -16,6 +17,64 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = "supabase_db_profit-radar-disposable"
 FORWARD = ROOT / "supabase/migrations/202609140001_remote_schema_forward.sql"
 FORWARD_V2 = ROOT / "supabase/migrations/202609150001_remote_schema_forward_v2.sql"
+REMOTE_CANONICAL_LF_SHA256 = '12a8812b782d2d2fd1d41a9199f12199d0c3767e76d4cfbe649ccdb15d1b08d2'
+REMOTE_CANONICAL_RAW_SHA256 = 'e426bdea084dfd662e3c766eeec3853588ae03affc16f7d7f885a576ec9f48ac'
+REMOTE_POLICY_SHA256 = 'df734f55b6379d0c2983d658aa15e6d93a667efe5200a13b6b4199cb9905dcc2'
+
+
+def remote_policy_oracle():
+    raw = (ROOT / 'docs/remote_policy_snapshot_20260915.json').read_bytes()
+    if len(raw) != 1016 or hashlib.sha256(raw).hexdigest() != REMOTE_POLICY_SHA256:
+        raise ValueError('Remote policy oracle corrupted')
+    policies = json.loads(raw)
+    if len(policies) != 4:
+        raise ValueError('Remote policy count mismatch')
+    for path in (FORWARD_V2, ROOT / 'supabase/remote_schema_forward_preflight.sql'):
+        embedded = json.loads(path.read_text(encoding='utf-8').split('$policy_oracle$')[1])
+        if sorted(embedded, key=lambda p: (p['tablename'], p['policyname'])) != sorted(policies, key=lambda p: (p['tablename'], p['policyname'])):
+            raise ValueError('Remote policy pin mismatch')
+    return policies
+
+
+def canonical_oracle_bytes():
+    """Lossless repository copy of independent capture, not a generated SQL fixture."""
+    capture = json.loads((ROOT / 'docs/create_company_and_profile_remote_capture.json').read_text(encoding='utf-8'))
+    raw = base64.b64decode(capture['raw_base64'], validate=True)
+    if len(raw) != 847 or hashlib.sha256(raw).hexdigest() != REMOTE_CANONICAL_RAW_SHA256:
+        raise ValueError('Independent raw capture corrupted')
+    normalized = raw.replace(b'\r\n', b'\n')
+    if hashlib.sha256(normalized).hexdigest() != REMOTE_CANONICAL_LF_SHA256:
+        raise ValueError('Independent LF capture corrupted')
+    normalized.decode('utf-8', errors='strict')
+    return raw
+
+
+def canonical_capture_hashes():
+    """Independent user-supplied remote digest; never derive approval from fixtures."""
+    paths = {
+        'docs': ROOT / 'docs/remote_onboarding_functiondefs_20260915_exact.txt',
+        'preflight': ROOT / 'supabase/remote_schema_forward_preflight.sql',
+        'migration': FORWARD_V2,
+    }
+    hashes = {}
+    for name, path in paths.items():
+        text = path.read_bytes().decode('utf-8', errors='strict')
+        if name == 'docs':
+            canonical = text.split('CREATE OR REPLACE FUNCTION public.create_company_and_profile(', 1)[1]
+            body = canonical.split('AS $function$', 1)[1].split('$function$;', 1)[0]
+        else:
+            body = text.split('$canonical_body$')[1]
+        # No strip, indentation removal, universal newline reader or other normalization.
+        hashes[name] = hashlib.sha256(body.replace('\r\n', '\n').encode('utf-8')).hexdigest()
+    return hashes
+
+
+def validate_canonical_capture():
+    canonical_oracle_bytes()
+    hashes = canonical_capture_hashes()
+    if any(value != REMOTE_CANONICAL_LF_SHA256 for value in hashes.values()):
+        raise ValueError('Remote canonical capture hash mismatch; no validation database created: ' + json.dumps(hashes))
+    return hashes
 
 
 def command(args, input=None, expected_error=None):
@@ -57,14 +116,16 @@ def sql(db, source, expected_error=None):
                     "-v", "ON_ERROR_STOP=1"], source, expected_error)
 
 
-def rows_fingerprint(db, tables):
+def rows_fingerprint(db, tables, ignore_added=False):
     # Only synthetic databases; digest calculated by PostgreSQL, no row content output.
     parts = []
     for table in tables:
         if not re.fullmatch(r"[a-z_]+", table):
             raise ValueError("Invalid table")
+        omitted = {'profit_events': ['description', 'neglected_days', 'recoverable_profit']}.get(table, []) if ignore_added else []
+        expression = 'to_jsonb(t)' + ''.join(" - '" + column + "'" for column in omitted)
         parts.append(f"select '{table}' as name,md5(coalesce(string_agg(j,',' order by j),'')) as digest from "
-                     f"(select to_jsonb(t)::text j from public.{table} t) x")
+                     f"(select ({expression})::text j from public.{table} t) x")
     result = sql(db, "select md5(string_agg(name||':'||digest,'|' order by name)) from (" +
                  " union all ".join(parts) + ") checks;")
     return result
@@ -87,6 +148,9 @@ select string_agg(x,'|' order by x) from (
 
 
 def run(approved=False, v2=False):
+    if v2 and approved:
+        validate_canonical_capture()
+        remote_policy_oracle()
     validate_target(approved)
     db = "pr_forward_" + uuid4().hex
     command(["docker", "exec", CONTAINER, "createdb", "-h", "/var/run/postgresql",
@@ -115,12 +179,49 @@ alter default privileges for role postgres in schema public grant all on tables 
         definitions = re.findall(r'CREATE OR REPLACE FUNCTION[\s\S]*?\$function\$;', evidence)
         assert len(definitions) == 2
         # New synthetic DB only: model observed remote instead of the newer local RPC.
-        sql(db, 'set role postgres; alter table public.companies add column owner_user_id uuid; drop function public.onboard_user(uuid,text,text,text); '
+        sql(db, 'set role postgres; alter table public.companies add column owner_user_id uuid default auth.uid(); drop function public.onboard_user(uuid,text,text,text); '
             + '\n'.join(definitions) + '''
 revoke all on function public.create_company_and_profile(text,text) from public,anon,service_role;
 grant execute on function public.create_company_and_profile(text,text) to authenticated;
 ''')
+        # Model observed missing columns and ACLs, not unknown remote policy bodies.
+        sql(db, '''set role postgres;
+alter table public.companies drop column updated_at;
+alter table public.profiles drop column updated_at;
+alter table public.gmail_sync_runs drop column company_id;
+alter table public.gmail_sync_runs drop column error_code;
+alter table public.gmail_sync_runs drop column detected_count;
+alter table public.gmail_sync_runs drop constraint gmail_sync_runs_status_check;
+alter table public.gmail_sync_runs add constraint gmail_sync_runs_status_check check(status in ('running','completed','failed','skipped'));
+alter table public.gmail_sync_runs add column company_count integer not null default 0;
+alter table public.gmail_sync_runs add column success_count integer not null default 0;
+alter table public.gmail_sync_runs add column failure_count integer not null default 0;
+alter table public.gmail_sync_runs add column detected_reply_count integer not null default 0;
+alter table public.gmail_sync_runs add column error_summary jsonb not null default '[]'::jsonb;
+alter table public.profit_events drop column description;
+alter table public.profit_events drop column neglected_days;
+alter table public.profit_events drop column recoverable_profit;
+grant truncate,trigger,references on public.ai_judgements,public.calendar_events,public.companies,public.customers,public.gmail_connections,public.learning_logs,public.messages,public.profiles,public.profit_events,public.reply_logs,public.timeline to anon,authenticated;
+grant insert,update on public.companies,public.profiles to authenticated;
+''')
+        # Replace repository fixture policies in this NEW disposable DB only.
+        sql(db, '''set role postgres;
+drop policy legacy_broad_profiles on public.profiles;
+drop policy profiles_select_own on public.profiles;
+drop policy profiles_self_boundary on public.profiles;
+drop policy companies_own_read on public.companies;
+drop policy companies_self_boundary on public.companies;
+''')
+        for policy in remote_policy_oracle():
+            assert policy['tablename'] in {'companies', 'profiles'} and policy['roles'] == ['authenticated']
+            statement = f"CREATE POLICY {policy['policyname']} ON public.{policy['tablename']} AS {policy['permissive']} FOR {policy['cmd']} TO authenticated"
+            if policy['qual'] is not None:
+                statement += ' USING (' + policy['qual'] + ')'
+            if policy['with_check'] is not None:
+                statement += ' WITH CHECK (' + policy['with_check'] + ')'
+            sql(db, 'set role postgres;' + statement + ';')
     legacy_tables = sql(db, "select tablename from pg_tables where schemaname='public' order by 1;").splitlines()
+    global_acl = sql(db, "select coalesce(relacl::text,'NULL') from pg_class where oid='public.gmail_sync_runs'::regclass;")
     canonical_before = sql(db, "select pg_get_functiondef(oid)||proacl::text from pg_proc where oid='public.create_company_and_profile(text,text)'::regprocedure;") if v2 else None
     # The empty fresh DB path and populated old-schema path are both exercised.
     forward = (FORWARD_V2 if v2 else FORWARD).read_text(encoding="utf-8")
@@ -134,9 +235,9 @@ create table public.unrelated_forward_sentinel(id integer primary key, marker te
 insert into public.unrelated_forward_sentinel values(1,'preserve');
 grant select on public.unrelated_forward_sentinel to authenticated;
 """)
-    before = rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"])
+    before = rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"], ignore_added=v2)
     sql(db, "set role postgres;\n" + forward)
-    assert before == rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"])
+    assert before == rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"], ignore_added=v2)
     assert sql(db, "select has_table_privilege('authenticated','public.unrelated_forward_sentinel','SELECT');") == "t"
     assert sql(db, "select mode from public.billing_runtime_config;") == "test"
     all_tables = sql(db, "select tablename from pg_tables where schemaname='public' order by 1;").splitlines()
@@ -144,7 +245,13 @@ grant select on public.unrelated_forward_sentinel to authenticated;
     signature = schema_fingerprint(db)
     sql(db, "set role postgres;\n" + forward)
     assert signature == schema_fingerprint(db)
+    assert global_acl == sql(db, "select coalesce(relacl::text,'NULL') from pg_class where oid='public.gmail_sync_runs'::regclass;")
     if v2:
+        # Known observed ACL drift is corrected on replay; no persistent row changes.
+        sql(db, 'set role postgres; grant truncate,trigger,references on public.customers to public,anon,authenticated; grant update(email) on public.profiles to authenticated;')
+        sql(db, 'set role postgres;' + forward)
+        assert signature == schema_fingerprint(db)
+        assert committed_rows == rows_fingerprint(db, all_tables)
         assert canonical_before == sql(db, "select pg_get_functiondef(oid)||proacl::text from pg_proc where oid='public.create_company_and_profile(text,text)'::regprocedure;")
     cases = [
         ("alter table public.financial_records add column unexpected text;", "incompatible existing table"),
@@ -160,19 +267,40 @@ grant select on public.unrelated_forward_sentinel to authenticated;
     ]
     if v2:
         cases.extend([
+            ("alter table public.gmail_sync_runs add column company_id uuid;", "global sync schema mismatch"),
+            ("alter table public.gmail_sync_runs alter column company_count drop not null;", "global sync schema mismatch"),
+            ("alter table public.gmail_sync_runs alter column error_summary set default '{}';", "global sync schema mismatch"),
+            ("insert into public.gmail_sync_runs(status) values('completed');", "global sync rows require review"),
+            ("alter table public.profit_events alter column description set default 'unknown';", "legacy column contract mismatch"),
+            ("alter table public.profit_events alter column neglected_days type bigint;", "legacy column contract mismatch"),
+            ("alter table public.profit_events alter column recoverable_profit type text using recoverable_profit::text;", "legacy column contract mismatch"),
+            ("create policy unknown on public.profiles for select to authenticated using(true);", "unknown legacy policy"),
+            ("alter policy profiles_update_own on public.profiles using(true);", "unknown legacy policy"),
+            ("alter policy companies_insert_own on public.companies to authenticated,anon;", "unknown legacy policy"),
+            ("grant select on public.customers to authenticator;", "unexpected legacy grantee"),
             ("alter table public.companies alter column owner_user_id type text using owner_user_id::text;", "prerequisite column/type mismatch"),
+            ("alter table public.companies alter column owner_user_id drop default;", "prerequisite column/type mismatch"),
+            ("alter table public.companies alter column owner_user_id set default gen_random_uuid();", "prerequisite column/type mismatch"),
+            ("update public.companies set owner_user_id=gen_random_uuid() where owner_user_id is null; alter table public.companies alter column owner_user_id set not null;", "prerequisite column/type mismatch"),
             ("alter table public.billing_checkout_attempts add column unexpected text;", "incompatible existing table"),
             ("create index unexpected_checkout on public.billing_checkout_attempts(session_id);", "unexpected checkout index"),
         ])
     for mutation, expected in cases:
         print(json.dumps({"checking_rejection": expected}), flush=True)
+        # Disposable transaction only: PostgreSQL otherwise rejects the type mutation
+        # BEFORE the migration because the authoritative policies depend on this column.
+        # Keep the uuid -> text case unchanged; all removed fixture policies roll back.
+        if mutation == "alter table public.companies alter column owner_user_id type text using owner_user_id::text;":
+            mutation = ("drop policy companies_insert_own on public.companies; "
+                        "drop policy companies_select_member_or_owner on public.companies; " + mutation)
         error = 'FORWARD_V2: untrusted schema CREATE' if v2 and expected == 'untrusted public schema CREATE' else 'FORWARD: ' + expected
         sql(db, "begin; set role postgres;\n" + mutation + "\n" + forward, error if expected != 'unexpected checkout index' else expected)
         assert signature == schema_fingerprint(db)
-        assert before == rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"])
+        assert before == rows_fingerprint(db, legacy_tables + ["unrelated_forward_sentinel"], ignore_added=v2)
         assert committed_rows == rows_fingerprint(db, all_tables)
     if v2:
         identity_cases = [
+            (definitions[1].replace('\ndeclare\n', '\ndeclare\n ') , 'exact body/arguments'),
             ("alter function public.onboard_user(uuid,text,text,text) set search_path=public;", 'onboarding ACL mismatch'),
             ("alter function public.onboard_user(uuid,text,text,text) security invoker;", 'owner/security/contract'),
             ("set role supabase_admin; alter function public.onboard_user(uuid,text,text,text) owner to supabase_admin; set role postgres;", 'owner/security/contract'),

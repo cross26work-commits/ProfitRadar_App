@@ -114,31 +114,18 @@ begin
   if auth.uid() is null then
     raise exception 'Authentication required';
   end if;
-
   if nullif(trim(company_name), '') is null or nullif(trim(owner_name), '') is null then
     raise exception 'Company name and owner name are required';
   end if;
-
   if exists (select 1 from public.profiles where user_id = auth.uid()) then
     raise exception 'Profile already exists';
   end if;
 
   caller_email := coalesce(auth.jwt() ->> 'email', '');
-
   insert into public.companies(name, plan)
-    values (trim(company_name), 'free')
-    returning id into new_company_id;
-
+    values (trim(company_name), 'free') returning id into new_company_id;
   insert into public.profiles(user_id, company_id, name, full_name, email, role)
-    values (
-      auth.uid(),
-      new_company_id,
-      trim(owner_name),
-      trim(owner_name),
-      caller_email,
-      'owner'
-    );
-
+    values (auth.uid(), new_company_id, trim(owner_name), trim(owner_name), caller_email, 'owner');
   return new_company_id;
 end;
 $canonical_body$,ARRAY['search_path=pg_catalog, public']))
@@ -246,7 +233,6 @@ WITH expected(table_name,column_name,type_name) AS (VALUES
 ('companies','name','text'),
 ('companies','plan','text'),
 ('companies','created_at','timestamptz'),
-('companies','updated_at','timestamptz'),
 ('company_billing','company_id','uuid'),
 ('company_billing','trial_ends_at','timestamptz'),
 ('company_billing','status','text'),
@@ -353,12 +339,9 @@ WITH expected(table_name,column_name,type_name) AS (VALUES
 ('gmail_sync_cursors','last_page_at','timestamptz'),
 ('gmail_sync_cursors','last_successful_sync','timestamptz'),
 ('gmail_sync_runs','id','uuid'),
-('gmail_sync_runs','company_id','uuid'),
 ('gmail_sync_runs','status','text'),
 ('gmail_sync_runs','started_at','timestamptz'),
 ('gmail_sync_runs','finished_at','timestamptz'),
-('gmail_sync_runs','error_code','text'),
-('gmail_sync_runs','detected_count','int4'),
 ('gmail_work_locks','company_id','uuid'),
 ('gmail_work_locks','owner_id','uuid'),
 ('gmail_work_locks','purpose','text'),
@@ -402,7 +385,6 @@ WITH expected(table_name,column_name,type_name) AS (VALUES
 ('profiles','full_name','text'),
 ('profiles','role','text'),
 ('profiles','created_at','timestamptz'),
-('profiles','updated_at','timestamptz'),
 ('profiles','name','text'),
 ('profit_events','id','uuid'),
 ('profit_events','company_id','uuid'),
@@ -463,6 +445,17 @@ SELECT e.*,a.atttypid::regtype AS actual_type,a.attnotnull,pg_get_expr(d.adbin,d
  LEFT JOIN pg_attribute a ON a.attrelid=to_regclass('public.'||e.table_name) AND a.attname=e.column_name AND a.attnum>0 AND NOT a.attisdropped
  LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum ORDER BY 1,2;
 
+-- 2B. Four approved forward additions. Missing is ADD_NULLABLE, never silently PASS.
+WITH expected(t,c,typ) AS (VALUES
+ ('profit_events','description','text'),('profit_events','neglected_days','int4'),('profit_events','recoverable_profit','int8'))
+SELECT e.*,CASE WHEN a.attnum IS NULL THEN 'ADD_NULLABLE'
+ WHEN a.atttypid=to_regtype(e.typ) AND a.atttypmod=-1 AND NOT a.attnotnull AND d.adbin IS NULL
+ AND a.attidentity='' AND a.attgenerated='' THEN 'COMPATIBLE' ELSE 'STOP_COLUMN_DRIFT' END AS decision
+FROM expected e LEFT JOIN pg_attribute a ON a.attrelid=to_regclass('public.'||e.t) AND a.attname=e.c AND NOT a.attisdropped
+LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum;
+-- Removed over-prerequisites: companies.updated_at, profiles.updated_at,
+-- gmail_sync_runs.error_code/detected_count. Current scheduler uses gmail_company_sync_runs.
+
 -- 3. Constraints/indexes: definition, readiness/validity, not just index names.
 SELECT c.relname AS table_name,con.conname,con.contype,con.convalidated,pg_get_constraintdef(con.oid) AS definition
 FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid WHERE c.relnamespace='public'::regnamespace
@@ -473,6 +466,12 @@ SELECT t.relname AS table_name,i.relname AS index_name,x.indisunique,x.indisvali
  AND t.relname IN ('account_deletion_audit','account_deletion_jobs','ai_budget_reservations','ai_judgements','ai_usage_runs','billing_checkout_attempts','billing_runtime_config','billing_webhook_events','calendar_events','companies','company_billing','conversation_analysis_snapshots','customers','financial_payments','financial_record_history','financial_records','gmail_company_sync_runs','gmail_connections','gmail_inbound_receipts','gmail_send_operations','gmail_sync_cursors','gmail_sync_runs','gmail_work_locks','learning_logs','messages','operation_recovery_audit','profiles','profit_events','reply_drafts','reply_logs','timeline') ORDER BY 1,2;
 
 -- 4. All policies and explicit table/column grants, including PUBLIC/custom roles.
+-- Authoritative 4-policy oracle. No role/qual/with_check/name relaxation.
+WITH expected AS (SELECT $policy_oracle$[{"cmd":"INSERT","qual":null,"roles":["authenticated"],"tablename":"companies","permissive":"PERMISSIVE","policyname":"companies_insert_own","schemaname":"public","with_check":"(owner_user_id = auth.uid())"},{"cmd":"SELECT","qual":"((owner_user_id = auth.uid()) OR (EXISTS ( SELECT 1\n   FROM profiles\n  WHERE ((profiles.company_id = companies.id) AND (profiles.user_id = auth.uid())))))","roles":["authenticated"],"tablename":"companies","permissive":"PERMISSIVE","policyname":"companies_select_member_or_owner","schemaname":"public","with_check":null},{"cmd":"SELECT","qual":"(user_id = auth.uid())","roles":["authenticated"],"tablename":"profiles","permissive":"PERMISSIVE","policyname":"profiles_select_own","schemaname":"public","with_check":null},{"cmd":"UPDATE","qual":"(user_id = auth.uid())","roles":["authenticated"],"tablename":"profiles","permissive":"PERMISSIVE","policyname":"profiles_update_own","schemaname":"public","with_check":null}]$policy_oracle$::jsonb snapshot),
+actual AS (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.tablename,p.policyname),'[]'::jsonb) snapshot
+ FROM pg_policies p WHERE schemaname='public' AND tablename IN ('companies','profiles','customers','messages','profit_events','timeline','reply_logs','ai_judgements','learning_logs','calendar_events','gmail_connections'))
+SELECT CASE WHEN actual.snapshot=expected.snapshot THEN 'EXACT_REMOTE_POLICY_MATCH' ELSE 'STOP_POLICY_DRIFT' END AS policy_gate,
+ actual.snapshot AS observed FROM actual CROSS JOIN expected;
 SELECT * FROM pg_policies WHERE schemaname='public' ORDER BY tablename,policyname;
 SELECT c.relname,a.grantee,CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS role_name,
  a.privilege_type,a.is_grantable FROM pg_class c CROSS JOIN LATERAL aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a
@@ -484,7 +483,11 @@ SELECT c.relname,col.attname,a.grantee,a.privilege_type,a.is_grantable FROM pg_a
 -- 5. Effective role privileges include PUBLIC and inherited grants.
 SELECT r.role,c.relname,has_table_privilege(r.role,c.oid,'SELECT') AS can_select,
  has_table_privilege(r.role,c.oid,'INSERT') AS can_insert,has_table_privilege(r.role,c.oid,'UPDATE') AS can_update,
- has_table_privilege(r.role,c.oid,'DELETE,TRUNCATE,TRIGGER') AS can_delete_truncate_trigger,
+ has_table_privilege(r.role,c.oid,'DELETE') AS can_delete,
+ has_table_privilege(r.role,c.oid,'TRUNCATE') AS can_truncate,
+ has_table_privilege(r.role,c.oid,'TRIGGER') AS can_trigger,
+ has_table_privilege(r.role,c.oid,'REFERENCES') AS can_references,
+ CASE WHEN current_setting('server_version_num')::int>=170000 THEN has_table_privilege(r.role,c.oid,'MAINTAIN') ELSE false END AS can_maintain,
  has_any_column_privilege(r.role,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') AS any_column_privilege
  FROM (VALUES('anon'),('authenticated'),('service_role')) r(role)
  CROSS JOIN pg_class c WHERE c.relnamespace='public'::regnamespace AND c.relkind IN ('r','v','m') ORDER BY 1,2;
@@ -494,6 +497,26 @@ SELECT r.role,has_schema_privilege(r.role,'public','USAGE') AS usage,has_schema_
  FROM (VALUES('anon'),('authenticated'),('service_role')) r(role);
 
 -- 6. ALL overloads, owner, search_path, return/argument contract, body digest, effective EXECUTE.
+-- 5B. Legacy browser desired access. NEEDS_REVOKE includes inherited/PUBLIC effective grants;
+-- the migration corrects only explicit PUBLIC/anon/authenticated ACLs and rejects remaining inheritance.
+WITH targets(t) AS (VALUES ('companies'),('profiles'),('customers'),('messages'),('profit_events'),('timeline'),
+ ('reply_logs'),('ai_judgements'),('learning_logs'),('calendar_events'),('gmail_connections')),
+desired AS (SELECT t,r,p,(r='authenticated' AND t IN ('companies','profiles') AND p='SELECT') allowed
+ FROM targets CROSS JOIN (VALUES('anon'),('authenticated')) roles(r)
+ CROSS JOIN (VALUES('SELECT'),('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('TRIGGER'),('REFERENCES')) privileges(p))
+SELECT *,has_table_privilege(r,to_regclass('public.'||t),p) effective,
+ CASE WHEN to_regclass('public.'||t) IS NULL THEN 'STOP_MISSING_TABLE'
+ WHEN has_table_privilege(r,to_regclass('public.'||t),p)=allowed THEN 'MATCH'
+ WHEN allowed THEN 'REQUIRED_SELECT_MISSING_REVIEW_RLS' ELSE 'NEEDS_REVOKE' END AS decision FROM desired ORDER BY t,r,p;
+-- Namespace ACL shows PUBLIC (grantee=0) rather than pretending PUBLIC is a pg_role.
+SELECT n.nspname,x.grantee,CASE WHEN x.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END AS grantee_name,
+ x.privilege_type,x.is_grantable FROM pg_namespace n CROSS JOIN LATERAL aclexplode(n.nspacl) x WHERE n.nspname='public';
+-- Required service path; false/null is STOP. No service ACL is silently broadened.
+SELECT c.relname,p.privilege,has_table_privilege('service_role',c.oid,p.privilege) required_service_access
+ FROM pg_class c CROSS JOIN (VALUES('SELECT'),('INSERT'),('UPDATE'),('DELETE')) p(privilege)
+ WHERE c.relnamespace='public'::regnamespace AND c.relname IN ('companies','profiles','customers','messages','profit_events',
+ 'timeline','reply_logs','ai_judgements','learning_logs','calendar_events','gmail_connections') ORDER BY 1,2;
+
 WITH expected(name) AS (VALUES ('commit_gmail_inbound_page'),('recover_company_work'),('save_financial_record'),('reserve_ai_budget'),('company_is_active'),('request_account_deletion'),('purge_account_data'),('complete_account_deletion'),('purge_expired_deletion_audit'),('prevent_deleted_user_onboarding'),('record_financial_payment'),('void_financial_payment'),('resolve_provider_uncertainty'),('promote_billing_live'),('acquire_gmail_sync_lock'),('apply_billing_snapshot'),('claim_gmail_work'),('create_company_and_profile'),('ensure_company_billing'),('finalize_gmail_send'),('onboard_user'),('release_gmail_sync_lock'),('release_gmail_work'),('reserve_ai_run'),('rls_auto_enable'))
 SELECT e.name,p.oid IS NOT NULL AS present,pg_get_function_identity_arguments(p.oid) AS arguments,
  pg_get_function_result(p.oid) AS result,pg_get_userbyid(p.proowner) AS owner,p.prosecdef,p.proconfig,
@@ -512,6 +535,37 @@ SELECT p.oid::regprocedure AS function,pg_get_userbyid(p.proowner) AS owner,p.pr
  FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.prosecdef ORDER BY 1;
 
 -- 8. Only aggregate identity counts (no IDs/emails). Assumes preflight 1/2 found profiles.user_id.
+-- Approved global aggregate contract, exact columns/defaults/nullability; company_id forbidden.
+-- Zero rows is a release prerequisite; migration rechecks under transaction lock.
+-- First result: actual metadata (no customer rows). Second: any returned row means STOP.
+SELECT a.attname AS column_name,format_type(a.atttypid,a.atttypmod) AS data_type,
+ a.attnotnull AS not_null,pg_get_expr(d.adbin,d.adrelid) AS column_default
+ FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+ WHERE a.attrelid='public.gmail_sync_runs'::regclass AND a.attnum>0 AND NOT a.attisdropped
+ ORDER BY a.attnum;
+WITH expected(name,typ,nn,def) AS (VALUES ('id','uuid',true,'gen_random_uuid()'),
+ ('status','text',true,NULL),
+ ('started_at','timestamptz',true,'now()'),
+ ('finished_at','timestamptz',false,NULL),
+ ('company_count','int4',true,'0'),
+ ('success_count','int4',true,'0'),
+ ('failure_count','int4',true,'0'),
+ ('detected_reply_count','int4',true,'0'),
+ ('error_summary','jsonb',true,'''[]''::jsonb')),
+ actual AS (
+ SELECT a.attname::text AS name,t.typname::text AS typ,a.attnotnull AS nn,
+ pg_get_expr(d.adbin,d.adrelid) AS def,a.atttypmod,a.attidentity,a.attgenerated
+ FROM pg_attribute a JOIN pg_type t ON t.oid=a.atttypid
+ LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+ WHERE a.attrelid='public.gmail_sync_runs'::regclass AND a.attnum>0 AND NOT a.attisdropped)
+ SELECT 1 FROM expected e FULL JOIN actual a USING(name)
+ WHERE e.name IS NULL OR a.name IS NULL OR e.typ IS DISTINCT FROM a.typ
+ OR e.nn IS DISTINCT FROM a.nn OR e.def IS DISTINCT FROM a.def
+ OR a.atttypmod<>-1 OR a.attidentity<>'' OR a.attgenerated<>''
+;
+SELECT count(*) AS legacy_sync_row_count,
+ CASE WHEN count(*)=0 THEN 'EMPTY_AT_CAPTURE' ELSE 'STOP_GLOBAL_SYNC_ROWS_REVIEW' END AS legacy_review
+ FROM public.gmail_sync_runs;
 SELECT count(*) FILTER (WHERE user_id IS NULL) AS null_user_ids,
  (SELECT count(*) FROM (SELECT user_id FROM public.profiles GROUP BY user_id HAVING count(*)>1) d) AS duplicate_groups
  FROM public.profiles;

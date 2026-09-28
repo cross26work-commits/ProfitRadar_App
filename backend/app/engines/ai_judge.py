@@ -484,5 +484,9 @@ Body:
             fallback["reason"]
             + " / AI unavailable"
         )
+        # A syntactically successful provider response can still be unusable.
+        # Mark the fallback so usage accounting never reports it as a successful
+        # AI judgement. Do not include provider exception text.
+        fallback["conversation_ai_error"] = "AI_PROVIDER_INVALID_RESPONSE"
 
         return fallback

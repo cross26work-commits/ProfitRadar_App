@@ -1,0 +1,46 @@
+version: 1
+redaction: credentials_customer_rows_provider_bodies
+alerts:
+  - id: frontend_unavailable
+    source: runtime_probe.frontend
+    condition: two_consecutive_failures
+    severity: critical
+  - id: backend_unavailable
+    source: runtime_probe.backend_health
+    condition: two_consecutive_failures
+    severity: critical
+  - id: database_not_ready
+    source: runtime_probe.backend_readiness
+    condition: any_failure
+    severity: critical
+  - id: worker_heartbeat_missing
+    source: runtime_probe.worker_heartbeat
+    condition: two_consecutive_failures
+    severity: critical
+  - id: scheduler_failed
+    source: sync_worker.sync_batch_failed
+    condition: two_consecutive_failures
+    severity: critical
+  - id: gmail_sync_failed_or_stuck
+    source: maintenance.recent_sync_failures_or_stuck_sync_runs
+    condition: count_greater_than_zero
+    severity: warning
+  - id: stripe_webhook_failed
+    source: api_access.billing_webhook_non_2xx
+    condition: any_failure
+    severity: critical
+  - id: ai_provider_failed
+    source: ai_usage_runs.failed_or_fallback
+    condition: count_greater_than_zero_in_15_minutes
+    severity: warning
+  - id: unresolved_provider_operation
+    source: maintenance.unresolved_sends_or_reserved_ai
+    condition: count_greater_than_zero
+    severity: warning
+rollback_trigger:
+  conditions:
+    - backend_unavailable_after_deploy
+    - database_not_ready_after_deploy
+    - tenant_isolation_smoke_failure
+    - credential_exposure_detected
+  action: stop_public_traffic_and_restore_previous_application_artifact

@@ -45,7 +45,7 @@ def analyze_and_save_revenue(
         )
 
         return service.analyze_and_save(company_id=company_id, payload=payload)
-    except SupabaseConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except APIError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except SupabaseConfigError:
+        raise HTTPException(status_code=503, detail="Database configuration unavailable") from None
+    except APIError:
+        raise HTTPException(status_code=503, detail="Revenue analysis storage unavailable") from None

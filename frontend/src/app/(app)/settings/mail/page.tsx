@@ -71,8 +71,8 @@ export default function MailSettingsPage() {
       const result = await getGmailStatus();
 
       setGmail(result);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      console.error("Gmail status unavailable");
 
       setErrorMessage(
         "メール接続状態を取得できませんでした。"
@@ -97,8 +97,8 @@ export default function MailSettingsPage() {
       const result = await getGmailAuthUrl();
 
       window.location.assign(result.auth_url);
-    } catch (error) {
-      console.error(error);
+    } catch {
+      console.error("Gmail connection could not start");
 
       setErrorMessage(
         "Googleとの接続を開始できませんでした。"
@@ -118,8 +118,8 @@ export default function MailSettingsPage() {
       setDisconnectOpen(false);
 
       await loadStatus();
-    } catch (error) {
-      console.error(error);
+    } catch {
+      console.error("Gmail disconnect could not be confirmed");
 
       setErrorMessage(
         "Googleとの接続を解除できませんでした。"
@@ -180,7 +180,7 @@ export default function MailSettingsPage() {
       ) : null}
 
       <Card className="p-6">
-        {!loading&&gmail?.connected&&<div className="mb-6 space-y-2 rounded-xl border p-4">
+        {!loading&&gmail?.connected&&<div className="mb-6 space-y-2 rounded-xl border p-4 text-slate-900">
           <p>最終同期完了：{formatDate(gmail.sync?.last_successful_sync)}</p>
           <p>同期状態：{gmail.last_run?.status==="failed"?"同期失敗。再試行してください。":gmail.last_run?.status==="running"?"同期中":gmail.sync?.mode==="full"?"初回取得を継続中":"次の同期を待機中"}</p>
           <Button onClick={syncNow} loading={syncing} disabled={loading||disconnecting}>今すぐ同期</Button>

@@ -66,6 +66,12 @@ def verify(db):
                         json={'company_name': 'V2 JWT fixture', 'owner_name': 'Synthetic'})
         assert r.status_code == 200, 'Canonical legitimate JWT registration failed'
         company = r.json()
+        profile_response = client.get('/profiles', params={'select': 'user_id,company_id,companies(name,plan)'}, headers={'Authorization': 'Bearer ' + token})
+        assert profile_response.status_code == 200 and len(profile_response.json()) == 1
+        assert profile_response.json()[0]['user_id'] == user.id
+        for table in ('companies', 'profiles'):
+            denied = client.post('/' + table, headers={'Authorization': 'Bearer ' + token}, json={})
+            assert denied.status_code == 403 and denied.json()['code'] == '42501'
         assert sql(db, f"select count(*) from public.profiles where user_id='{user.id}' and company_id='{company}' and role='owner';") == '1'
         after = rows_fingerprint(db, ['companies', 'profiles'])
         r = client.post('/rpc/create_company_and_profile', headers={'Authorization': 'Bearer ' + token},

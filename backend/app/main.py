@@ -53,7 +53,9 @@ def health():
 # Legacy / current API routers
 @app.get("/ready")
 def readiness():
+    import os
     from fastapi import HTTPException
+    from app.core.billing_mode import require_database_mode
     from app.core.supabase_client import get_supabase_client
     try:
         db=get_supabase_client()
@@ -61,6 +63,8 @@ def readiness():
                           ("ai_budget_reservations","id"),("account_deletion_jobs","id"),("account_deletion_audit","id"),
                           ("gmail_sync_cursors","company_id"),("gmail_company_sync_runs","id"),("financial_records","profit_event_id"),("financial_payments","id")):
             db.table(table).select(key).limit(1).execute()
+        if os.getenv("APP_ENV") not in {"development", "test"}:
+            require_database_mode(db)
     except Exception:
         raise HTTPException(503,"Service not ready") from None
     return {"status":"ready"}

@@ -177,7 +177,7 @@ export async function getHomeDashboard(): Promise<HomeDashboardData> {
       ),
     };
   } catch (error) {
-    console.error("getHomeDashboard API failed:", error);
+    console.error("getHomeDashboard API failed");
     throw error;
   }
 }
@@ -207,7 +207,7 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
       leads: home.reply_queue.map(mapActionToLead),
     };
   } catch (error) {
-    console.error("getReplyDashboard API failed:", error);
+    console.error("getReplyDashboard API failed");
     throw error;
   }
 }
@@ -226,7 +226,7 @@ export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
       customers: apiCustomers,
     };
   } catch (error) {
-    console.error("getCustomersDashboard API failed:", error);
+    console.error("getCustomersDashboard API failed");
     throw error;
   }
 }
@@ -250,7 +250,7 @@ export async function getCustomerDetail(customerId: string | number = 1): Promis
       timeline: apiTimeline,
     };
   } catch (error) {
-    console.error("getCustomerDetail API failed:", error);
+    console.error("getCustomerDetail API failed");
     throw error;
   }
 }
@@ -271,7 +271,7 @@ export async function getLeadDetail(leadId: string | number = 1): Promise<LeadDe
       timeline: apiTimeline,
     };
   } catch (error) {
-    console.error("getLeadDetail API failed:", error);
+    console.error("getLeadDetail API failed");
     throw error;
   }
 }
@@ -292,7 +292,7 @@ export async function getResultsDashboard(): Promise<ResultsDashboardData> {
       selfEvaluation,
     };
   } catch (error) {
-    console.error("getResultsDashboard API failed:", error);
+    console.error("getResultsDashboard API failed");
     throw error;
   }
 }

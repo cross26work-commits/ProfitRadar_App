@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 
 
@@ -32,12 +32,12 @@ def sync_company(db, company_id, work):
 
 
 def batch(company_ids, work):
-    summary={"processed":0,"succeeded":0,"failed":0,"busy":0,"errors":[]}
+    summary={"processed":0,"succeeded":0,"failed":0,"busy":0,"deferred":0,"errors":[]}
     for company_id in company_ids:
         summary["processed"]+=1
         try:
-            work(company_id)
-            summary["succeeded"]+=1
+            result=work(company_id)
+            summary["deferred" if isinstance(result,dict) and result.get("deferred") is True else "succeeded"]+=1
         except HTTPException as exc:
             code="BUSY" if exc.status_code==409 else "SYNC_FAILED"
             summary["busy" if code=="BUSY" else "failed"]+=1
@@ -46,3 +46,26 @@ def batch(company_ids, work):
             summary["failed"]+=1
             summary["errors"].append({"company_id":company_id,"code":"SYNC_FAILED"})
     return summary
+
+
+def retry_due(recent_runs, now=None):
+    """Bound consecutive company failures; never release a running lock here."""
+    if not recent_runs:
+        return True
+    if recent_runs[0].get("status") == "running":
+        return False
+    failures = 0
+    for row in recent_runs:
+        if row.get("status") != "failed":
+            break
+        failures += 1
+    if not failures:
+        return True
+    try:
+        last = datetime.fromisoformat(recent_runs[0]["finished_at"].replace("Z", "+00:00"))
+        if last.tzinfo is None:
+            return False
+        delay = min(300 * 2 ** (failures - 1), 3600)
+        return (now or datetime.now(timezone.utc)) >= last + timedelta(seconds=delay)
+    except (AttributeError, KeyError, TypeError, ValueError, OverflowError):
+        return False
