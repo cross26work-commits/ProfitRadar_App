@@ -8,6 +8,7 @@ validate_production()
 from app.api import account
 from app.api.billing import router as billing_router
 from app.api.financials import router as financials_router
+from app.api.support import public_router as support_router, admin_router as admin_support_router
 
 from app.api import reply, self_evaluation, sales_forecast, profit_events, actions, home_brief, dashboard_home, onboarding
 from fastapi import FastAPI, Depends
@@ -61,7 +62,9 @@ def readiness():
         db=get_supabase_client()
         for table,key in (("gmail_send_operations","operation_id"),("company_billing","company_id"),("gmail_work_locks","company_id"),("reply_drafts","profit_event_id"),("ai_usage_runs","id"),
                           ("ai_budget_reservations","id"),("account_deletion_jobs","id"),("account_deletion_audit","id"),
-                          ("gmail_sync_cursors","company_id"),("gmail_company_sync_runs","id"),("financial_records","profit_event_id"),("financial_payments","id")):
+                          ("gmail_sync_cursors","company_id"),("gmail_company_sync_runs","id"),("financial_records","profit_event_id"),("financial_payments","id"),
+                          ("company_business_consents","company_id"),("billing_checkout_consents","company_id"),("support_requests","id"),
+                          ("support_messages","id"),("support_internal_notes","id"),("support_audit_logs","id")):
             db.table(table).select(key).limit(1).execute()
         if os.getenv("APP_ENV") not in {"development", "test"}:
             require_database_mode(db)
@@ -96,3 +99,5 @@ app.include_router(onboarding.router)
 app.include_router(account.router)
 app.include_router(billing_router)
 app.include_router(financials_router)
+app.include_router(support_router)
+app.include_router(admin_support_router)

@@ -21,7 +21,8 @@ Current verdict: **BLOCKED / NOT READY**. AI isolated real-generation and Stripe
 3. **Google production approval** — in Google Cloud, verify domain/branding/support/home/privacy URLs and obtain the applicable Sensitive/Restricted scope approval. Because `gmail.readonly` data is processed on a server, confirm and complete the required independent security assessment unless Google records an applicable exception. Required before external Gmail users.
 4. **Stripe LIVE** — create/verify the JPY 19,800 monthly tax-inclusive LIVE Price, restricted/secret key, webhook destination and subscription events; decide tax, invoice/receipt and refund operations. Record an approval reference and follow the stopped-writer one-way database promotion. Do not paste keys or perform a real charge during preparation. Required before paid signup.
 5. **Worker and monitoring** — install/enable the five-minute sync worker and maintenance timer on the selected host; test the HTTPS alert receiver, independent missed-heartbeat monitor and responder escalation. Required before public signup.
-6. **Legal/publication** — provide seller identity/address/contact, support channel, retention/backup deletion periods, refund/cancellation terms, actual processors/international transfers and the legally reviewed commercial disclosure. Keep `SALES_PUBLICATION_APPROVED` false until complete. Required before deploy/publication and first customer.
+6. **Legal/publication** — obtain independent review and provide the actual seller legal name, governing court/effective date, public domain and support address. Address and telephone use the approved “disclose without delay on request” flow; do not hard-code personal details. Confirm actual processors/international transfers. Keep all three publication approvals false until complete. Product terms are seven-day card-on-file trial, JPY 19,800 tax-inclusive monthly auto-renewal, cancellation any time, no customer-convenience/prorated refund, normal data deletion/anonymization within 30 days and backup rotation within 90 days.
+7. **Support operations** — create a dedicated Supabase Auth administrator, place only its UUID in backend-only `SUPPORT_ADMIN_USER_IDS`, generate `CONTACT_RATE_LIMIT_SECRET`, choose the public `SUPPORT_EMAIL`, verify its production domain/sender and provision the SMTP provider secrets. Confirm `SUPPORT_RETENTION_DAYS` with counsel. Never grant admin through `profiles.role`.
 7. **Backup/recovery** — the reported one-time logical restore proof is retained, but Free-plan Supabase has no scheduled project backup. Approve a recurring encrypted logical backup destination/schedule, retention, credential rotation, recovery objectives and disposable restore cadence. Required before public signup.
 8. **Controlled deployment/smoke** — after 1–7, approve deployment and non-customer Production smoke covering registration, Gmail, AI, controlled mail, finance, LIVE billing, cancellation and deletion. This is a later consequential gate, not authorized now.
 
@@ -70,7 +71,7 @@ Stripe TEST E2Eはcredential未設定のためBLOCKED。コードで回避せず
 - Success URL: `<FRONTEND_URL>/settings/plan?checkout=complete`
 - Cancel URL: `<FRONTEND_URL>/settings/plan?checkout=cancelled`
 
-PriceはJPY 19,800、月次、interval_count=1、税込（tax_behavior=inclusive）であることをAPI応答から検証する。14日trialは現在コードではアプリ管理で、試用終了時の自動課金はない。既存TEST Priceの存在はこの環境から確認できないため、再利用可否や新規作成を仮定しない。Credential投入後にcheckout→TEST payment→署名Webhook→DB subscription→entitlement→重複Webhook→cancel→cancellation webhookを隔離環境だけで実行する。Live key / Live chargeは禁止。
+PriceはJPY 19,800、月次、interval_count=1、税込（tax_behavior=inclusive）であることをAPI応答から検証する。Checkoutはカード登録時0円、Stripe subscriptionの7日trial、終了時自動課金、月次自動更新である。既存TEST Priceの存在は再利用可否や新規作成を仮定しない。Credential投入後にcheckout→TEST payment method→署名Webhook→DB trialing subscription→entitlement→重複Webhook→cancel→cancellation webhookを隔離環境だけで実行する。Live key / Live chargeは禁止。
 
 ### EXTERNAL MANUAL
 
@@ -118,7 +119,7 @@ backendから python -m scripts.migrate_local_gmail_tokens はローカルdry-ru
 
 ## Stripe
 現設定はtest既定。production切替gateは実装済み・未有効化。月額JPY19,800、month/interval_count1、税込inclusive Priceをテスト環境に用意する。
-secret/key/webhookはBackendだけへ注入。14日試用はアプリ管理、終了時自動課金なし。
+secret/key/webhookはBackendだけへ注入。7日trialと自動更新条件はStripe TESTで検証し、Productionへは別承認で切り替える。
 実Stripe testの重複/順序逆転/支払失敗/解約/再契約/UNKNOWNが未実証。
 live切替はRELEASE_RUNBOOKの設定・DB approval一致と実test E2E、別承認が必要。test履歴があるDBの安易な昇格は拒否する。live呼出/実課金禁止を維持。
 

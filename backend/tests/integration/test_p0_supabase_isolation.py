@@ -4,7 +4,7 @@ No manually supplied JWTs. Never enable against shared or production databases.
 """
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -71,10 +71,13 @@ def environment():
         session = browser.auth.sign_in_with_password({"email": email, "password": password}).session
         browser.postgrest.auth(session.access_token)
         headers = {"Authorization": f"Bearer {session.access_token}"}
-        response = api.post("/onboarding", headers=headers, json={"company_name": f"P0-{user.id}", "name": "Isolated fixture"})
+        response = api.post("/onboarding", headers=headers, json={"company_name": f"P0-{user.id}", "name": "Isolated fixture", "business_use_confirmed": True})
         assert response.status_code == 200
         profile = service.table("profiles").select("id,user_id,company_id,role").eq("user_id", user.id).single().execute().data
         assert profile["role"] == "owner"
+        # This disposable fixture represents a card-authorized Stripe trial.
+        service.rpc("ensure_company_billing", {"p_company_id":profile["company_id"]}).execute()
+        service.table("company_billing").update({"status":"trialing","trial_ends_at":(datetime.now(timezone.utc)+timedelta(days=7)).isoformat()}).eq("company_id",profile["company_id"]).execute()
         actors.append((browser, headers, profile))
         customer = service.table("customers").insert({"company_id": profile["company_id"], "name": "P0 fixture", "email": email}).execute().data[0]
         service.table("profit_events").insert({"id": profile["id"], "company_id": profile["company_id"], "customer_id": customer["id"], "title": "P0 isolation fixture", "status": "open"}).execute()
@@ -114,7 +117,7 @@ def test_onboarding_replay_concurrency_and_untrusted_fields(environment):
     api, service, actors = environment
     _, headers, own = actors[0]
     def replay(_):
-        response = api.post("/onboarding", headers=headers, json={"company_name": "Must not create", "name": "Replay"})
+        response = api.post("/onboarding", headers=headers, json={"company_name": "Must not create", "name": "Replay", "business_use_confirmed": True})
         assert response.status_code == 200
         assert response.json()["result"][0]["created"] is False
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -126,7 +129,7 @@ def test_onboarding_replay_concurrency_and_untrusted_fields(environment):
 
 def test_missing_and_invalid_token(environment):
     api = environment[0]
-    body = {"company_name": "Forbidden", "name": "Forbidden"}
+    body = {"company_name": "Forbidden", "name": "Forbidden", "business_use_confirmed": True}
     assert api.post("/onboarding", json=body).status_code == 401
     assert api.post("/onboarding", json=body, headers={"Authorization": "Bearer invalid"}).status_code == 401
 
@@ -167,7 +170,7 @@ def test_first_onboarding_concurrently_creates_exactly_one_company(environment):
     session = browser.auth.sign_in_with_password({"email": email, "password": password}).session
     name = f"P0-race-{user.id}"
     def register(_):
-        response = api.post("/onboarding", headers={"Authorization": f"Bearer {session.access_token}"}, json={"name": "Concurrent fixture", "company_name": name})
+        response = api.post("/onboarding", headers={"Authorization": f"Bearer {session.access_token}"}, json={"name": "Concurrent fixture", "company_name": name, "business_use_confirmed": True})
         assert response.status_code == 200
         return response.json()["result"][0]
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -394,7 +397,7 @@ def test_account_delete_real_reauthentication_and_atomic_cleanup(environment):
     browser=create_client(os.environ["P0_SUPABASE_TEST_URL"],os.environ["P0_SUPABASE_TEST_ANON_KEY"])
     session=browser.auth.sign_in_with_password({"email":email,"password":password}).session
     headers={"Authorization":f"Bearer {session.access_token}"}
-    response=api.post("/onboarding",headers=headers,json={"company_name":"Deletion fixture","name":"Fixture"})
+    response=api.post("/onboarding",headers=headers,json={"company_name":"Deletion fixture","name":"Fixture","business_use_confirmed":True})
     assert response.status_code==200
     company=response.json()["result"][0]["company_id"]
     customer=service.table("customers").insert({"company_id":company,"name":"Delete fixture"}).execute().data[0]
@@ -414,6 +417,17 @@ def test_account_delete_real_reauthentication_and_atomic_cleanup(environment):
     assert service.table("account_deletion_jobs").select(projection).eq("user_id",user.id).execute().data==jobs
     audit=service.table("account_deletion_audit").select("stage").eq("job_id",jobs[0]["id"]).execute().data
     assert {row["stage"] for row in audit}=={"requested","data_deleted","completed"}
+
+
+def test_support_internal_tables_are_browser_denied_and_service_readable(environment):
+    _, service, actors = environment
+    for table in ("support_requests", "support_messages", "support_internal_notes", "support_audit_logs",
+                  "company_business_consents", "billing_checkout_consents"):
+        assert isinstance(service.table(table).select("*").limit(1).execute().data, list)
+        for browser, _, _ in actors:
+            with pytest.raises(APIError) as error:
+                browser.table(table).select("*").limit(1).execute()
+            assert error.value.code == "42501"
 
 
 def test_split_payment_idempotency_and_cross_company_rejection(environment):

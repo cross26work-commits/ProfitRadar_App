@@ -98,8 +98,9 @@ def test_stale_test_confirmation_cannot_create_live_checkout(monkeypatch):
     approved(monkeypatch)
     db=Mock(side_effect=AssertionError("Must reject before DB or provider"))
     monkeypatch.setattr(api,"get_supabase_client",db)
-    for payload in (None,api.CheckoutIntent(expected_mode="test")):
-        with pytest.raises(HTTPException) as error:api.checkout("fixture",payload)
-        assert error.value.status_code==409
+    payload=api.CheckoutIntent(expected_mode="test",business_use_confirmed=True,
+        automatic_renewal_confirmed=True,terms_confirmed=True,privacy_confirmed=True,refund_policy_confirmed=True)
+    with pytest.raises(HTTPException) as error:api.checkout(payload,"fixture",{"sub":"00000000-0000-4000-8000-000000000001"})
+    assert error.value.status_code==409
     db.assert_not_called()
     billing.requests.request.assert_not_called()

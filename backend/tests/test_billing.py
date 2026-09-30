@@ -7,15 +7,18 @@ from fastapi import HTTPException
 from app.services import billing
 
 
-@pytest.mark.parametrize("elapsed,allowed", [(13,True),(15,False)])
+@pytest.mark.parametrize("elapsed,allowed", [(6,True),(8,False)])
 def test_trial_deadline_without_stripe(elapsed,allowed,monkeypatch):
     db=Mock()
     db.table.return_value.select.return_value.eq.return_value.execute.return_value=SimpleNamespace(data=[{"mode":"test","approval_ref":None}])
-    end=datetime.now(timezone.utc)+timedelta(days=14-elapsed)
-    db.rpc.side_effect=lambda name,args:SimpleNamespace(execute=lambda:SimpleNamespace(data=True if name=="company_is_active" else [{"status":"trial","trial_ends_at":end.isoformat()}]))
+    end=datetime.now(timezone.utc)+timedelta(days=7-elapsed)
+    db.rpc.side_effect=lambda name,args:SimpleNamespace(execute=lambda:SimpleNamespace(data=True if name=="company_is_active" else [{"status":"trialing","trial_ends_at":end.isoformat()}]))
     provider=Mock(side_effect=AssertionError("Trial must not charge"))
     monkeypatch.setattr(billing,"stripe_request",provider)
     assert billing.status(db,"a")["allowed"] is allowed
+    assert billing.status(db,"a")["trial_days"] == 7
+    assert billing.status(db,"a")["today_due_jpy"] == 0
+    assert billing.status(db,"a")["automatic_trial_charge"] is True
     if not allowed:
         with pytest.raises(HTTPException) as exc: billing.require_use(db,"a")
         assert exc.value.status_code==402

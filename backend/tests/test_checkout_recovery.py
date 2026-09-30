@@ -8,8 +8,9 @@ from app.api import billing as api
 
 
 def setup(monkeypatch,status='trial',attempt=None):
-    db=Mock();q=Mock();db.table.return_value=q
+    db=Mock();q=Mock();consent=Mock();db.table.side_effect=lambda name: consent if name=='billing_checkout_consents' else q
     for name in ('select','eq','upsert','update'):getattr(q,name).return_value=q
+    consent.upsert.return_value=consent;consent.execute.return_value=SimpleNamespace(data=[{'saved':True}])
     q.execute.return_value=SimpleNamespace(data=[attempt] if attempt else [])
     monkeypatch.setattr(api,'get_supabase_client',lambda:db)
     monkeypatch.setattr(api,'company_lock',lambda *args:nullcontext())
@@ -20,18 +21,20 @@ def setup(monkeypatch,status='trial',attempt=None):
 
 
 def price():return {'active':True,'currency':'jpy','unit_amount':19800,'recurring':{'interval':'month','interval_count':1},'tax_behavior':'inclusive'}
+def intent():return api.CheckoutIntent(expected_mode='test',business_use_confirmed=True,automatic_renewal_confirmed=True,terms_confirmed=True,privacy_confirmed=True,refund_policy_confirmed=True)
+def checkout():return api.checkout(intent(),'a',{'sub':'00000000-0000-4000-8000-000000000001'})
 
 
 @pytest.mark.parametrize('status',['active','past_due','unpaid','incomplete','paused'])
 def test_existing_contract_cannot_create_second_subscription(monkeypatch,status):
     _,provider=setup(monkeypatch,status)
-    with pytest.raises(HTTPException) as exc:api.checkout('a')
+    with pytest.raises(HTTPException) as exc:checkout()
     assert exc.value.status_code==409;provider.assert_not_called()
 
 
 def test_attempt_must_be_saved_before_checkout_provider_call(monkeypatch):
     _,provider=setup(monkeypatch);provider.return_value=price()
-    with pytest.raises(HTTPException) as exc:api.checkout('a')
+    with pytest.raises(HTTPException) as exc:checkout()
     assert exc.value.status_code==503
     provider.assert_called_once_with('GET','prices/price_fixture')
 
@@ -40,11 +43,12 @@ def test_unknown_checkout_reuses_durable_idempotency_key(monkeypatch):
     attempt={'attempt_id':'fixture-id','created_at':datetime.now(timezone.utc).isoformat(),'session_id':None}
     _,provider=setup(monkeypatch,attempt=attempt)
     provider.side_effect=[price(),HTTPException(503,'unknown'),price(),{'id':'cs_test','url':'https://checkout.stripe.com/test'}]
-    with pytest.raises(HTTPException) as exc:api.checkout('a')
+    with pytest.raises(HTTPException) as exc:checkout()
     assert exc.value.status_code==503
-    assert api.checkout('a')['test_mode']
+    assert checkout()['test_mode']
     writes=[c for c in provider.call_args_list if c.args[0]=='POST']
     assert len(writes)==2 and all(c.kwargs['idempotency_key']=='checkout-fixture-id' for c in writes)
+    assert all(c.args[2]['payment_method_collection']=='always' and c.args[2]['subscription_data[trial_period_days]']==7 for c in writes)
 
 
 def test_resubscribe_only_after_provider_confirms_old_contract_ended(monkeypatch):
@@ -52,5 +56,5 @@ def test_resubscribe_only_after_provider_confirms_old_contract_ended(monkeypatch
     q.execute.side_effect=[SimpleNamespace(data=[{'session_id':'cs_old'}]),SimpleNamespace(data=[{'saved':True}]),SimpleNamespace(data=[{'saved':True}])]
     provider.side_effect=[price(),{'status':'complete','client_reference_id':'a','subscription':'sub_old'},
                           {'status':'canceled','metadata':{'company_id':'a'}},{'id':'cs_new','url':'https://checkout.stripe.com/test'}]
-    assert api.checkout('a')['url']=='https://checkout.stripe.com/test'
+    assert checkout()['url']=='https://checkout.stripe.com/test'
     assert provider.call_args.kwargs['idempotency_key'].startswith('checkout-')

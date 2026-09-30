@@ -113,7 +113,7 @@ def main() -> int:
         onboard = requests.post(
             BACKEND_URL + "/onboarding",
             headers=headers,
-            json={"company_name": marker, "name": "Stripe isolated fixture"},
+            json={"company_name": marker, "name": "Stripe isolated fixture", "business_use_confirmed": True},
             timeout=10,
         )
         if onboard.status_code != 200:
@@ -132,7 +132,9 @@ def main() -> int:
         checkout = requests.post(
             BACKEND_URL + "/billing/checkout",
             headers=headers,
-            json={"expected_mode": "test"},
+            json={"expected_mode": "test", "business_use_confirmed": True,
+                  "automatic_renewal_confirmed": True, "terms_confirmed": True,
+                  "privacy_confirmed": True, "refund_policy_confirmed": True},
             timeout=30,
         )
         if checkout.status_code != 200:

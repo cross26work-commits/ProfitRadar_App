@@ -79,7 +79,7 @@ export function mapResultSummaryToStats(summary: ApiResultSummaryResponse): Stat
     {
       label: "今月実回収",
       value: formatYen(summary.actual_profit),
-      sub: "API接続済み",
+      sub: "記録済みデータから集計",
     },
     {
       label: "受注見込額",

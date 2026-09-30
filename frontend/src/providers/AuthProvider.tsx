@@ -19,7 +19,7 @@ type AuthContextType = {
   session: Session | null;
   profile: AppProfile | null;
   loading: boolean;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<AppProfile | null>;
   logout: () => Promise<void>;
 };
 
@@ -27,7 +27,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   loading: true,
-  refreshProfile: async () => {},
+  refreshProfile: async () => null,
   logout: async () => {},
 });
 
@@ -40,9 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const appProfile = await getCurrentAppProfile();
       setProfile(appProfile);
+      return appProfile;
     } catch {
       console.warn("Profile load failed");
       setProfile(null);
+      return null;
     }
   }
 

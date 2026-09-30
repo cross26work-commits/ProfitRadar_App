@@ -23,6 +23,8 @@ def counters(db):
         "recent_sync_failures":db.table("gmail_company_sync_runs").select("id",count="exact",head=True).eq("status","failed").gte("started_at",threshold),
         "stuck_sync_runs":db.table("gmail_company_sync_runs").select("id",count="exact",head=True).eq("status","running").lt("started_at",threshold),
         "recent_ai_failures":db.table("ai_usage_runs").select("id",count="exact",head=True).in_("status",["failed","fallback"]).gte("created_at",threshold),
+        "unhandled_support":db.table("support_requests").select("id",count="exact",head=True).eq("status","unhandled"),
+        "unknown_support_replies":db.table("support_messages").select("id",count="exact",head=True).in_("delivery_status",["unknown","sending"]),
     }
     result={}
     for name,query in queries.items():
@@ -39,6 +41,11 @@ def run(db,expected_url,apply_retention=False):
     if apply_retention:
         if os.getenv("RETENTION_SWEEP_APPROVED")!="true":raise ValueError("Retention policy approval required")
         result["purged_audit_jobs"]=db.rpc("purge_expired_deletion_audit",{}).execute().data
+        try:
+            support_days=int(os.environ["SUPPORT_RETENTION_DAYS"])
+        except (KeyError, ValueError):
+            raise ValueError("Support retention policy required") from None
+        result["purged_support_requests"]=db.rpc("purge_expired_support_records",{"p_retention_days":support_days}).execute().data
         result["retention_applied"]=True
     result["operator_review_required"]=any(result["counts"].values())
     if result["operator_review_required"]:
@@ -54,7 +61,7 @@ def notify(result):
     # Fixed operational counts only. Never include rows, provider exceptions,
     # URLs, tickets, environment values, email or tokens in the payload.
     payload={"event":"profit_radar_maintenance","severity":result.get("severity","warning"),"review_required":bool(result["operator_review_required"]),
-             "counts":{key:int(result["counts"][key]) for key in ("unresolved_sends","pending_deletions","reserved_ai","old_company_locks","recent_sync_failures","stuck_sync_runs","recent_ai_failures")}}
+             "counts":{key:int(result["counts"][key]) for key in ("unresolved_sends","pending_deletions","reserved_ai","old_company_locks","recent_sync_failures","stuck_sync_runs","recent_ai_failures","unhandled_support","unknown_support_replies")}}
     try:
         response=requests.post(target,json=payload,timeout=5,allow_redirects=False)
         if not 200<=response.status_code<300:raise ValueError()

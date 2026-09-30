@@ -4,7 +4,8 @@ from uuid import uuid4
 from typing import Literal
 from pydantic import BaseModel, ConfigDict
 from fastapi import APIRouter,Depends,HTTPException,Request
-from app.core.company_context import get_current_company_id
+from app.core.company_context import get_current_company_id, _extract_user_id
+from app.core.auth import get_current_user
 from app.core.supabase_client import get_supabase_client
 from app.services import billing
 from app.services.gmail_work import company_lock
@@ -15,6 +16,11 @@ router=APIRouter(prefix="/billing",tags=["billing"])
 class CheckoutIntent(BaseModel):
     model_config=ConfigDict(extra="forbid")
     expected_mode:Literal["test","live"]="test"
+    business_use_confirmed: bool
+    automatic_renewal_confirmed: bool
+    terms_confirmed: bool
+    privacy_confirmed: bool
+    refund_policy_confirmed: bool
 
 
 @router.get("/status")
@@ -23,16 +29,19 @@ def billing_status(company_id: str=Depends(get_current_company_id)):
 
 
 @router.post("/checkout")
-def checkout(company_id: str=Depends(get_current_company_id),payload:CheckoutIntent|None=None):
+def checkout(payload:CheckoutIntent, company_id: str=Depends(get_current_company_id), user:dict=Depends(get_current_user)):
     # Legacy clients imply TEST; a deployment switch cannot silently turn a
     # previously shown test confirmation into a real paid signup.
-    expected=payload.expected_mode if payload else "test"
+    expected=payload.expected_mode
+    if not all((payload.business_use_confirmed, payload.automatic_renewal_confirmed,
+                payload.terms_confirmed, payload.privacy_confirmed, payload.refund_policy_confirmed)):
+        raise HTTPException(422,"All checkout confirmations are required")
     if expected!=billing.configured_mode():
         raise HTTPException(409,"Billing mode changed; reload and confirm the current signup")
     db=get_supabase_client()
     with company_lock(db,company_id,"checkout"):
         current=billing.status(db,company_id)
-        if current["status"] not in {"trial","trial_expired","canceled","incomplete_expired"}:
+        if current["status"] not in {"trial_pending","trial","trial_expired","canceled","incomplete_expired"}:
             raise HTTPException(409,"Resolve the existing subscription before starting another")
         price=os.getenv("STRIPE_PRICE_ID","")
         base=os.getenv("FRONTEND_URL","").rstrip("/")
@@ -40,6 +49,13 @@ def checkout(company_id: str=Depends(get_current_company_id),payload:CheckoutInt
         product=billing.stripe_request("GET",f"prices/{price}")
         if product.get("active") is not True or product.get("currency")!="jpy" or product.get("unit_amount")!=19800 or product.get("recurring",{}).get("interval")!="month" or product.get("recurring",{}).get("interval_count")!=1 or product.get("tax_behavior")!="inclusive":
             raise HTTPException(503,"Billing price configuration mismatch")
+        actor=_extract_user_id(user)
+        if not actor: raise HTTPException(401,"User ID not found")
+        consent={"company_id":company_id,"user_id":actor,"terms_version":os.getenv("TERMS_VERSION","2026-09-29"),
+                 "business_use_confirmed":True,"automatic_renewal_confirmed":True,"refund_policy_confirmed":True,
+                 "trial_days":7,"monthly_price_jpy":19800,"accepted_at":datetime.now(timezone.utc).isoformat()}
+        if not db.table("billing_checkout_consents").upsert(consent,on_conflict="company_id").execute().data:
+            raise HTTPException(503,"Checkout consent was not saved")
         attempts=db.table("billing_checkout_attempts").select("*").eq("company_id",company_id).execute().data
         attempt=attempts[0] if attempts else None
         if attempt and attempt.get("session_id"):
@@ -64,6 +80,7 @@ def checkout(company_id: str=Depends(get_current_company_id),payload:CheckoutInt
         session=billing.stripe_request("POST","checkout/sessions",{
             "mode":"subscription","line_items[0][price]":price,"line_items[0][quantity]":1,
             "client_reference_id":company_id,"subscription_data[metadata][company_id]":company_id,
+            "payment_method_collection":"always","subscription_data[trial_period_days]":7,
             "success_url":base+"/settings/plan?checkout=complete","cancel_url":base+"/settings/plan?checkout=cancelled",
         },idempotency_key="checkout-"+attempt["attempt_id"])
         if not db.table("billing_checkout_attempts").update({"session_id":session["id"]}).eq("company_id",company_id).eq("attempt_id",attempt["attempt_id"]).execute().data:

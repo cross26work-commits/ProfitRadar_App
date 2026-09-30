@@ -1,4 +1,4 @@
-"""14-day app-managed trial; Stripe is contacted only on explicit paid signup.
+"""Seven-day card-on-file trial with explicit disclosure and automatic renewal.
 
 Default TEST only; live requires deployment approval and a matching DB gate.
 """
@@ -23,8 +23,13 @@ def status(db, company_id):
     now=datetime.now(timezone.utc)
     trial=datetime.fromisoformat(row["trial_ends_at"].replace("Z","+00:00"))
     paid=datetime.fromisoformat(row["paid_until"].replace("Z","+00:00")) if row.get("paid_until") else None
-    allowed=(row["status"]=="trial" and trial>now) or (row["status"]=="active" and paid is not None and paid>now)
-    return {"status":row["status"] if allowed else ("trial_expired" if row["status"]=="trial" else row["status"]),"allowed":bool(allowed),"trial_ends_at":row["trial_ends_at"],"paid_until":row.get("paid_until"),"monthly_price_jpy":19800,"automatic_trial_charge":False,"test_mode":mode=="test"}
+    trial_status = row["status"] in {"trial", "trialing"}
+    allowed=(trial_status and trial>now) or (row["status"]=="active" and paid is not None and paid>now)
+    display_status = row["status"] if allowed else ("trial_expired" if trial_status else row["status"])
+    return {"status":display_status,"allowed":bool(allowed),"trial_ends_at":row["trial_ends_at"],"paid_until":row.get("paid_until"),
+            "trial_days":7,"monthly_price_jpy":19800,"today_due_jpy":0,
+            "automatic_trial_charge":True,"automatic_renewal":True,"business_only":True,
+            "first_billing_at":row["trial_ends_at"],"test_mode":mode=="test"}
 
 
 def require_use(db,company_id):

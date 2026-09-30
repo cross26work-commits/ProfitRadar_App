@@ -98,9 +98,17 @@ def _client_config() -> dict:
     redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
 
     if not client_id or not client_secret or not redirect_uri:
+        local_environment = os.getenv("APP_ENV", "").strip().lower() in {
+            "development",
+            "test",
+        }
         raise HTTPException(
-            status_code=500,
-            detail="Google OAuth env is missing",
+            status_code=501 if local_environment else 424,
+            detail=(
+                "Google OAuth is not configured for this local or test environment"
+                if local_environment
+                else "Google OAuth production configuration is incomplete"
+            ),
         )
 
     return {
@@ -152,24 +160,31 @@ def gmail_status(
 def gmail_auth_url(
     company_id: str = Depends(get_current_company_id),
 ):
+    cfg = _client_config()
     from app.services.billing import require_use
     require_use(get_supabase_client(),company_id)
-    cfg = _client_config()
+    try:
+        flow = Flow.from_client_config(
+            cfg["config"],
+            scopes=SCOPES,
+            redirect_uri=cfg["redirect_uri"],
+            autogenerate_code_verifier=False,
+        )
 
-    flow = Flow.from_client_config(
-        cfg["config"],
-        scopes=SCOPES,
-        redirect_uri=cfg["redirect_uri"],
-        autogenerate_code_verifier=False,
-    )
+        oauth_state = _create_oauth_state(company_id)
 
-    oauth_state = _create_oauth_state(company_id)
-
-    auth_url, state = flow.authorization_url(
-        access_type="offline",
-        prompt="consent",
-        state=oauth_state,
-    )
+        auth_url, state = flow.authorization_url(
+            access_type="offline",
+            prompt="consent",
+            state=oauth_state,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="Google OAuth authorization is temporarily unavailable",
+        ) from None
 
     return {
         "auth_url": auth_url,

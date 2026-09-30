@@ -19,8 +19,8 @@ export function ChartCard({ title, description, children }: ChartCardProps) {
       </div>
       <div className="flex min-h-64 items-center justify-center rounded-2xl bg-slate-50">
         {children ?? (
-          <p className="text-sm font-bold text-slate-500">
-            グラフ表示エリア
+          <p className="max-w-md px-6 text-center text-sm font-medium leading-6 text-slate-600">
+            まだ推移を表示できるデータがありません。売上・入金・原価を記録すると、ここに推移が表示されます。
           </p>
         )}
       </div>

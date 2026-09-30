@@ -1,5 +1,13 @@
 # Profit Radar 公開・復旧・運営手順
 
+## 2026-09-30 通常ローカル起動
+
+1. Docker Desktop / Engineを通常起動する。prune、volume削除、Supabase resetは不要。
+2. repository rootから `./scripts/start-profit-radar.ps1` を実行する。固定CLIが通常migrationを `.local-runtime` へbyte-for-byte stagingし、remote専用V1/V2だけを除外する。Production URL、Production-like `APP_ENV`、Stripe LIVE keyは起動前に拒否される。
+3. READY URLはSupabase `127.0.0.1:54421`、Backend `127.0.0.1:8031`、Frontend `127.0.0.1:3101`。`/health`、`/ready`、`/login`、`/register`、`/onboarding`を確認する。CLI keyは表示しない。
+4. 停止は `./scripts/stop-profit-radar.ps1`。PID command lineを照合し、`profit-radar-local`だけを停止する。volumeは保持され、`profit-radar-disposable`等の別projectは操作しない。
+5. clean-build ordering fixは `202609060001_reply_logs_gmail_bridge.sql`。remote専用V1/V2をfresh chainへ混ぜたり、既存migrationを編集したりしない。詳細Evidenceは `docs/evidence/LOCAL_STARTUP_REPAIR_20260930.md`。
+
 ## 2026-09-28 P0 remediation運用（最新）
 
 - Production環境契約は `PRODUCTION_ENVIRONMENT.md` と `deploy/production-env.schema.json`。BackendはProduction TEST billing/localhost/HTTP/origin不一致を拒否し、readinessはDB billing modeも確認する。Frontendは`APP_ENV=production`時に法務/販売情報をfail-closedにする。
@@ -30,7 +38,15 @@ The final controlled deployment must use the exact reviewed artifact, inject sec
 1. Dockerは`desktop-linux`、既存projectは`profit-radar-disposable`、APIは`http://127.0.0.1:54321`、DBは`127.0.0.1:54322`であることを確認する。prune、`down -v`、volume削除、`.local-isolated`再作成、Production link/db pushは禁止。
 2. AI isolated restartはrepo rootから `backend/venv/Scripts/python.exe backend/scripts/run_isolated_ai_restart.py`。ランナーは非loopback Supabase、Production URL、Live Stripe、非`sk_test_` keyを事前拒否し、repo `.env`全体をchildへ読み込まない。`.local-isolated/ai-e2e.env`はgitignore対象かつlocal ACL制限対象。secret、prompt、生成本文は標準出力へ出さない。
 3. 合格条件は既存Backend停止→新規isolated process→`/health`→`/ready`→provider-backed reply 1回→`ai_usage_runs` token/cost→`ai_budget_reservations` actual token/company cap→generation limitの順にすべてPASSし、検証後processが停止すること。2026-09-27実績はPASS、generation_calls=1、Production contact=0。
-4. Stripe TESTは `STRIPE_SECRET_KEY=sk_test_*`、`STRIPE_WEBHOOK_SECRET=whsec_*`、`STRIPE_PRICE_ID=price_*` を隔離secret storeからのみ注入する。`STRIPE_MODE=test`を固定。Price API応答がJPY 19,800、month、interval_count=1、tax_behavior=inclusiveでなければ停止する。14日trialはアプリ管理で、自動課金しない。
+4. Stripe TESTは `STRIPE_SECRET_KEY=sk_test_*`、`STRIPE_WEBHOOK_SECRET=whsec_*`、`STRIPE_PRICE_ID=price_*` を隔離secret storeからのみ注入する。`STRIPE_MODE=test`を固定。Price API応答がJPY 19,800、month、interval_count=1、tax_behavior=inclusiveでなければ停止する。現在の契約はカード登録時0円、Stripe subscriptionの7日trial、終了時自動課金、月次自動更新である。Checkout直前の5確認と保存済み同意証跡を確認する。
+
+## Legal/support Production gate (2026-09-29)
+
+1. `20260928153027_legal_support_admin.sql` は既存migrationを改変せず適用する。事前backup、writer停止、transaction適用、6テーブル/RLS/ACL/RPC、7日billing関数、既存件数不変を確認する。未適用のままアプリをdeployしない。
+2. Frontend publicationは seller legal name、公開support address、terms date/court/processor disclosures、30/90日、address/phone request disclosureと3 approval flagが揃うまでfail closed。
+3. Backend startupは admin UUID allowlist、contact HMAC secret、support retention、approved sender/domain、SMTP secretがないProductionを拒否する。値はserver secret storeだけへ置く。
+4. `/admin/support` は通常tenant roleでは認可されない。専用adminで一覧/開示請求/notes/audit/replyをsmoke testし、通常userのUI直打ちとAPIが403であることを確認する。
+5. Maintenanceで未対応件数とunknown/sending replyを監視し、明示承認されたretention runだけが完了済みsupport recordを削除する。provider outcome unknownを自動再送しない。
 5. Webhookは`/billing/webhook`、successは`<FRONTEND_URL>/settings/plan?checkout=complete`、cancelは`<FRONTEND_URL>/settings/plan?checkout=cancelled`。credential投入後にcheckout→TEST payment→署名Webhook→DB subscription→entitlement→duplicate webhook→cancel→cancellation webhookを実施する。Live key / Live charge / Production接続は禁止。
 6. 回帰は`backend/venv/Scripts/python.exe backend/scripts/run_local_regression.py --allow-disposable-fixtures`。2026-09-28 Stripe E2E後の実績はintegration 32/0 skipped、全Backend 288 passed。
 7. Vector loggingのDocker endpoint `Network unreachable`はDB/Auth/API E2Eへ影響しない非P0。Stripe/AI gate後に別途調査し、P0合格を偽装するため設定を緩めない。

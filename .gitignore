@@ -25,6 +25,7 @@ supabase/.temp/
 backup-*/
 .local-isolated/
 .local-isolated-*/
+.local-runtime/
 
 # Read-only remote evidence is kept in reviewed JSON/TXT/SQL files. Browser
 # save-as copies and their asset folders can contain session-shaped values and

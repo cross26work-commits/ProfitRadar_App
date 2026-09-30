@@ -72,8 +72,6 @@ export default function MailSettingsPage() {
 
       setGmail(result);
     } catch {
-      console.error("Gmail status unavailable");
-
       setErrorMessage(
         "メール接続状態を取得できませんでした。"
       );
@@ -97,12 +95,16 @@ export default function MailSettingsPage() {
       const result = await getGmailAuthUrl();
 
       window.location.assign(result.auth_url);
-    } catch {
-      console.error("Gmail connection could not start");
-
-      setErrorMessage(
-        "Googleとの接続を開始できませんでした。"
-      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 501) {
+        setErrorMessage("このローカル・テスト環境ではGoogle OAuthが設定されていません。実際のGoogle接続は、専用のテスト設定がある環境で確認してください。");
+      } else if (error instanceof ApiError && error.status === 424) {
+        setErrorMessage("Google連携の本番設定が完了していません。設定が確認されるまで接続は開始されません。運営担当へお問い合わせください。");
+      } else if (error instanceof ApiError && error.status === 502) {
+        setErrorMessage("Googleの認証画面を準備できませんでした。一時的な接続障害の可能性があります。時間を置いて再試行してください。");
+      } else {
+        setErrorMessage(error instanceof ApiError ? error.message : "Google連携を開始できませんでした。通信状態を確認して、時間を置いて再試行してください。");
+      }
 
       setConnecting(false);
     }
@@ -119,8 +121,6 @@ export default function MailSettingsPage() {
 
       await loadStatus();
     } catch {
-      console.error("Gmail disconnect could not be confirmed");
-
       setErrorMessage(
         "Googleとの接続を解除できませんでした。"
       );
@@ -266,69 +266,6 @@ export default function MailSettingsPage() {
               </Button>
             ) : null}
           </div>
-        </div>
-      </Card>
-
-      <Card className="p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-bold text-slate-900">
-                Microsoft
-              </h2>
-
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                準備中
-              </span>
-            </div>
-
-            <p className="mt-2 text-sm text-slate-600">
-              Outlook / Microsoft 365
-            </p>
-
-            <p className="mt-3 text-xs leading-5 text-slate-500">
-              Microsoft Graphによる接続に対応予定です。
-            </p>
-          </div>
-
-          <Button
-            variant="secondary"
-            disabled
-          >
-            準備中
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-6">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-bold text-slate-900">
-                その他のメール
-              </h2>
-
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
-                準備中
-              </span>
-            </div>
-
-            <p className="mt-2 text-sm text-slate-600">
-              IMAP / SMTP
-            </p>
-
-            <p className="mt-3 max-w-xl text-xs leading-5 text-slate-500">
-              独自ドメインメール、Yahoo Mailなど、
-              IMAP/SMTP対応サービス向けの接続方式です。
-            </p>
-          </div>
-
-          <Button
-            variant="secondary"
-            disabled
-          >
-            準備中
-          </Button>
         </div>
       </Card>
 

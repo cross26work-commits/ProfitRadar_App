@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { completeOnboarding } from "@/services/onboarding/onboardingService";
+import { ApiError } from "@/lib/api";
 
 
 export default function OnboardingPage() {
@@ -20,9 +21,11 @@ export default function OnboardingPage() {
 
   const [companyName, setCompanyName] = useState("");
   const [name, setName] = useState("");
+  const [businessUseConfirmed, setBusinessUseConfirmed] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canSubmit = companyName.trim().length > 0 && name.trim().length > 0 && businessUseConfirmed;
 
 
   useEffect(() => {
@@ -71,9 +74,9 @@ export default function OnboardingPage() {
     const cleanCompanyName = companyName.trim();
     const cleanName = name.trim();
 
-    if (!cleanCompanyName || !cleanName) {
+    if (!cleanCompanyName || !cleanName || !businessUseConfirmed) {
       setErrorMessage(
-        "会社名とお名前を入力してください。"
+        "会社名、お名前、事業利用の確認が必要です。"
       );
       return;
     }
@@ -84,15 +87,23 @@ export default function OnboardingPage() {
       await completeOnboarding({
         companyName: cleanCompanyName,
         name: cleanName,
+        businessUseConfirmed,
       });
 
-      await refreshProfile();
+      const completedProfile = await refreshProfile();
+      if (!completedProfile?.companyId) {
+        throw new Error("Onboarding profile did not become readable");
+      }
 
       router.replace("/dashboard");
       router.refresh();
 
-    } catch {
-      setErrorMessage("初期設定を確認できません。再読み込みして登録状態を確認してください。");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof ApiError
+          ? error.message
+          : "初期設定を保存できませんでした。入力内容と通信状態を確認して、もう一度お試しください。"
+      );
 
     } finally {
       setIsSubmitting(false);
@@ -144,11 +155,12 @@ export default function OnboardingPage() {
         <div className="mt-7 space-y-5">
 
           <div>
-            <label className="text-sm font-medium text-slate-700">
+            <label htmlFor="onboarding-company-name" className="text-sm font-medium text-slate-700">
               会社名・屋号
             </label>
 
             <input
+              id="onboarding-company-name"
               value={companyName}
               onChange={(event) =>
                 setCompanyName(event.target.value)
@@ -160,11 +172,12 @@ export default function OnboardingPage() {
 
 
           <div>
-            <label className="text-sm font-medium text-slate-700">
+            <label htmlFor="onboarding-owner-name" className="text-sm font-medium text-slate-700">
               お名前
             </label>
 
             <input
+              id="onboarding-owner-name"
               value={name}
               onChange={(event) =>
                 setName(event.target.value)
@@ -187,6 +200,16 @@ export default function OnboardingPage() {
             </div>
           ) : null}
 
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-400 bg-white p-4 text-sm leading-6 text-slate-900 transition hover:border-emerald-600 hover:bg-emerald-50 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-200 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50">
+            <input
+              type="checkbox"
+              checked={businessUseConfirmed}
+              onChange={(event) => setBusinessUseConfirmed(event.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-emerald-600 outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+            />
+            <span className="font-medium">私は法人または個人事業主等として、本サービスを事業目的で利用します。</span>
+          </label>
+
 
           {errorMessage ? (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -198,13 +221,22 @@ export default function OnboardingPage() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting}
-            className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+            disabled={isSubmitting || !canSubmit}
+            aria-describedby="onboarding-submit-help"
+            className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             {isSubmitting
               ? "設定中..."
               : "Profit Radarを開始"}
           </button>
+
+          <p id="onboarding-submit-help" className="text-xs leading-5 text-slate-600" aria-live="polite">
+            {isSubmitting
+              ? "初期設定を保存しています。"
+              : canSubmit
+                ? "入力内容を保存してダッシュボードへ進みます。"
+                : "会社名、お名前、事業利用の確認をすべて入力すると開始できます。"}
+          </p>
 
         </div>
       </div>

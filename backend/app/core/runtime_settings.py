@@ -11,6 +11,10 @@ PRODUCTION_REQUIRED = (
     "WORKER_HEALTH_HOST", "WORKER_HEALTH_PORT", "WORKER_HEALTH_URL",
     "GMAIL_SYNC_INTERVAL_SECONDS", "WORKER_MAX_BACKOFF_SECONDS",
     "MONITORING_WEBHOOK_URL", "ACCOUNT_AUDIT_RETENTION_DAYS",
+    "SUPPORT_ADMIN_USER_IDS", "CONTACT_RATE_LIMIT_SECRET", "SUPPORT_RETENTION_DAYS",
+    "SUPPORT_EMAIL_PROVIDER", "SUPPORT_EMAIL_FROM", "SUPPORT_EMAIL_VERIFIED_DOMAIN",
+    "SUPPORT_EMAIL_SENDER_APPROVED", "SUPPORT_EMAIL_SMTP_HOST", "SUPPORT_EMAIL_SMTP_PORT",
+    "SUPPORT_EMAIL_SMTP_USERNAME", "SUPPORT_EMAIL_SMTP_PASSWORD",
 )
 AI_MODEL_SETTINGS = (
     "OPENAI_MODEL_PRIMARY", "OPENAI_MODEL_ESCALATION", "OPENAI_MODEL_STANDARD",
@@ -103,16 +107,29 @@ def validate_production():
     if any(not os.getenv(name, "").strip() for name in AI_PRODUCTION_REQUIRED):
         raise RuntimeError("Required AI production settings are missing")
     try:
+        from uuid import UUID
         worker_port = int(os.environ["WORKER_HEALTH_PORT"])
         worker_interval = int(os.environ["GMAIL_SYNC_INTERVAL_SECONDS"])
         worker_backoff = int(os.environ["WORKER_MAX_BACKOFF_SECONDS"])
         retention_days = int(os.environ["ACCOUNT_AUDIT_RETENTION_DAYS"])
+        support_retention_days = int(os.environ["SUPPORT_RETENTION_DAYS"])
         if (not 1 <= worker_port <= 65535 or not 5 <= worker_interval <= 3600
                 or worker_backoff < worker_interval or worker_backoff > 86400
-                or not 1 <= retention_days <= 3650):
+                or not 1 <= retention_days <= 3650 or not 1 <= support_retention_days <= 3650):
+            raise ValueError()
+        admin_ids = [value.strip() for value in os.environ["SUPPORT_ADMIN_USER_IDS"].split(",") if value.strip()]
+        if not admin_ids or any(str(UUID(value)) != value.lower() for value in admin_ids):
             raise ValueError()
     except ValueError:
         raise RuntimeError("Production operational limits are invalid") from None
+    sender = os.environ["SUPPORT_EMAIL_FROM"].strip().lower()
+    sender_domain = os.environ["SUPPORT_EMAIL_VERIFIED_DOMAIN"].strip().lower()
+    if (len(os.environ["CONTACT_RATE_LIMIT_SECRET"]) < 24
+            or os.environ["SUPPORT_EMAIL_PROVIDER"] != "smtp"
+            or os.environ["SUPPORT_EMAIL_SENDER_APPROVED"] != "true"
+            or "@" not in sender or sender.rsplit("@", 1)[1] != sender_domain
+            or not sender_domain or os.environ["SUPPORT_EMAIL_SMTP_PORT"] not in {"465", "587"}):
+        raise RuntimeError("Production support settings are invalid")
     try:
         generation_limit = int(os.environ["AI_MONTHLY_GENERATION_LIMIT"])
         if not 1 <= generation_limit <= 10000:

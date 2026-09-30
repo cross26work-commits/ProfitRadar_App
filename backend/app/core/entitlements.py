@@ -9,7 +9,8 @@ from app.services.billing import require_use
 def lifecycle_path(path):
     # Lifecycle/recovery must remain available after expiry. Each retains its own auth.
     return (path in {"/onboarding","/account","/gmail/disconnect","/gmail/scheduled-sync","/auth/login","/auth/register","/auth/logout",
-                    "/billing/checkout","/billing/webhook","/billing/cancel"}
+                    "/billing/checkout","/billing/webhook","/billing/cancel","/support/contact"}
+            or path.startswith("/admin/support")
             or (path.startswith("/reply/") and path.endswith("/reconcile")))
 
 

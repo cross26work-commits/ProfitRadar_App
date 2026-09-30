@@ -1,4 +1,5 @@
 from typing import Any
+import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -14,6 +15,7 @@ class OnboardingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     company_name: str
     name: str
+    business_use_confirmed: bool
 
 
 def _extract_user_id(user: dict[str, Any]) -> str:
@@ -52,6 +54,8 @@ def onboard(
             status_code=400,
             detail="Company name is required",
         )
+    if payload.business_use_confirmed is not True:
+        raise HTTPException(status_code=422, detail="Business use confirmation is required")
 
     if not name:
         raise HTTPException(
@@ -72,9 +76,20 @@ def onboard(
             },
         ).execute()
 
+        rows = result.data or []
+        if not rows:
+            raise RuntimeError("Onboarding result unavailable")
+        company_id = rows[0].get("company_id") if isinstance(rows, list) else None
+        if not company_id:
+            raise RuntimeError("Onboarding result unavailable")
+        db.table("company_business_consents").upsert({
+            "company_id": company_id,
+            "user_id": user_id,
+            "terms_version": os.getenv("TERMS_VERSION", "2026-09-29"),
+        }, on_conflict="company_id").execute()
         return {
             "success": True,
-            "result": result.data,
+            "result": rows,
         }
 
     except Exception:

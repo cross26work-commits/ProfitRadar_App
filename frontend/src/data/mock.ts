@@ -34,7 +34,7 @@ export const stats = [
 export const tasks = [
   {
     id: 1,
-    title: "CROSS WORKの見積回答に返信しましょう",
+    title: "COROS WORKの見積回答に返信しましょう",
     profit: "¥36,000",
     delay: "2日超過",
   },
@@ -54,7 +54,7 @@ export const tasks = [
 
 export const replyLeads = [
   {
-    customer: "CROSS WORK",
+    customer: "COROS WORK",
     subject: "見積の件、ご確認お願いいたします",
     profit: "¥36,000",
     priority: "高",
@@ -77,7 +77,7 @@ export const replyLeads = [
 ];
 
 export const recentActivities = [
-  "CROSS WORKから返信がありました",
+  "COROS WORKから返信がありました",
   "株式会社Aの案件を更新しました",
   "B株式会社の実利益を入力しました",
   "新しいメールを受信しました",

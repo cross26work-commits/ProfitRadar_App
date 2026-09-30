@@ -50,6 +50,7 @@ export default function RegisterPage() {
     useState("");
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [businessUseConfirmed, setBusinessUseConfirmed] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -73,9 +74,9 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!acceptedTerms) {
+    if (!acceptedTerms || !businessUseConfirmed) {
       setErrorMessage(
-        "利用規約とプライバシーポリシーへの同意が必要です。"
+        "事業利用の確認と、利用規約・プライバシーポリシーへの同意が必要です。"
       );
       return;
     }
@@ -98,9 +99,10 @@ export default function RegisterPage() {
       await completeOnboarding({
         companyName: companyName.trim(),
         name: name.trim(),
+        businessUseConfirmed,
       });
 
-      router.push("/dashboard");
+      router.push("/settings/plan");
       router.refresh();
     } catch (error) {
       setErrorMessage(getRegisterErrorMessage(error));
@@ -179,6 +181,11 @@ export default function RegisterPage() {
               setPasswordConfirmation(event.target.value)
             }
           />
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <input type="checkbox" checked={businessUseConfirmed} onChange={(event) => setBusinessUseConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" />
+            <span className="text-xs leading-5 text-slate-600">私は法人または個人事業主等として、本サービスを事業目的で利用します。</span>
+          </label>
 
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <input

@@ -242,7 +242,7 @@ def run() -> int:
             onboard = requests.post(
                 f"http://127.0.0.1:{PORT}/onboarding",
                 headers={"Authorization": f"Bearer {session.access_token}"},
-                json={"company_name": marker, "name": "Isolated AI fixture"}, timeout=10,
+                json={"company_name": marker, "name": "Isolated AI fixture", "business_use_confirmed": True}, timeout=10,
             )
             if onboard.status_code != 200:
                 raise RuntimeError("Isolated onboarding failed")

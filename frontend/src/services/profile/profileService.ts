@@ -67,7 +67,7 @@ export async function getCurrentAppProfile(): Promise<AppProfile | null> {
     .from("profiles")
     .select(`
       user_id,
-      name,
+      full_name,
       role,
       company_id,
       companies (
@@ -97,7 +97,7 @@ export async function getCurrentAppProfile(): Promise<AppProfile | null> {
   return {
     userId: profile.user_id,
     email: user.email ?? "",
-    name: profile.name,
+    name: profile.full_name || user.email || "未設定",
     role: profile.role,
     companyId: profile.company_id,
     companyName: company?.name ?? "未設定",
