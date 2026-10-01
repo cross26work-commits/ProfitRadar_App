@@ -1,5 +1,7 @@
 ﻿import Link from "next/link";
 
+import { LegalBackLink } from "@/components/legal/LegalBackLink";
+
 const sections = [
   {
     title: "第1条（適用）",
@@ -106,12 +108,7 @@ export default function TermsPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-12">
       <div className="mx-auto w-full max-w-3xl">
-        <Link
-          href="/register"
-          className="text-sm font-semibold text-emerald-700 hover:underline"
-        >
-          ← 新規登録へ戻る
-        </Link>
+        <LegalBackLink />
 
         <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-10">
           <div className="border-b border-slate-200 pb-6">
@@ -159,6 +156,7 @@ export default function TermsPage() {
                 ? `合意管轄: ${process.env.GOVERNING_COURT}`
                 : "※ 正式公開前に、運営者情報、料金条件、管轄その他の確定事項を反映します。"}
             </p>
+            <Link href="/contact" className="mt-3 inline-block text-sm font-semibold text-emerald-800 underline underline-offset-4">問い合わせ</Link>
           </div>
         </div>
       </div>

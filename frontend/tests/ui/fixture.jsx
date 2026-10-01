@@ -3,10 +3,10 @@ import React from 'react';
 export const state=new URLSearchParams(location.search).get('state')||'normal';
 export const usePathname=()=>new URLSearchParams(location.search).get('page')||'/dashboard';
 export const useSearchParams=()=>new URLSearchParams(location.search);
-export const href=(path)=>`/?page=${encodeURIComponent(path)}&state=${state}`;
+export const href=(path)=>{const target=new URL(path,'http://fixture.invalid');const params=new URLSearchParams({page:target.pathname,state});for(const [key,value] of target.searchParams)params.set(key,value);return `/?${params}`;};
 export const useRouter=()=>({push:p=>location.assign(href(p)),replace:p=>location.assign(href(p)),refresh:()=>location.reload()});
 export default function Link({href:target,children,...props}){return <a href={href(target)} {...props}>{children}</a>;}
-export const useAuth=()=>({loading:false,profile:{name:'検証担当（架空）',companyName:'UI検証株式会社（架空）',plan:'trial'},session:{user:{email:'fixture@example.invalid',user_metadata:{}}}});
+export const useAuth=()=>({loading:false,profile:state==='unauthenticated'?null:{name:'検証担当（架空）',companyName:'UI検証株式会社（架空）',plan:'trial'},session:state==='unauthenticated'?null:{user:{email:'fixture@example.invalid',user_metadata:{}}}});
 export const supabase={auth:{signOut:async()=>({error:null})}};
 export const deleteCurrentAccount=async()=>{throw new Error('Fixture: deletion disabled');};
 export class ApiError extends Error{constructor(status){super(status===429?'利用上限に達しました。':status===402?'試用・契約期間をご確認ください。':'一時的に利用できません。');this.status=status;}}
@@ -30,7 +30,7 @@ export async function apiGet(path){
  if(path.startsWith('/gmail/replies'))return {count:items.length,items:empty?[]:[{id:'fixture',profit_event_id:event,customer_id:customer,customer_name:action.customer_name,customer_email:'recipient@example.invalid',subject:action.title,body:'E2E専用の架空メールです。',received_at:action.created_at,event_title:action.title,next_action:'条件を確認',estimated_profit:0,risk_level:'medium'}]};
  if(path.startsWith('/reply/'))return draft();
  if(path==='/gmail/status')return {connected:state!=='disconnected',connection:state==='disconnected'?null:{email:'fixture@example.invalid',created_at:action.created_at},sync:{mode:'delta',last_successful_sync:action.created_at},last_run:{status:state==='sync-failure'?'failed':'succeeded'}};
- if(path==='/billing/status')return {status:state==='expired'?'trial_expired':state==='payment-failed'?'past_due':'trial',allowed:!['expired','payment-failed'].includes(state),trial_ends_at:'2026-09-24T00:00:00Z',paid_until:null};
+ if(path==='/billing/status'){const status=state==='expired'?'trial_expired':state==='payment-failed'?'past_due':state==='trialing'?'trialing':'trial_pending';return {status,allowed:status==='trialing',trial_ends_at:'2026-09-24T00:00:00Z',paid_until:null,test_mode:true,trial_days:7,monthly_price_jpy:19800,today_due_jpy:0,first_billing_at:'2026-09-24T00:00:00Z',automatic_trial_charge:true,automatic_renewal:true};}
  throw new Error(`Unimplemented fixture GET: ${path}`);
 }
 export async function apiPost(path,body){

@@ -1,5 +1,15 @@
 # Profit Radar release status
 
+## 2026-10-01 Post Contract / Legal UX checkpoint（最新）
+
+- Phase: **Contract/Legal UX frozen locally / external Production gates remain**. Checkout/subscription state presentation now distinguishes checkout-not-started, incomplete, card-registered trial, active, canceled and payment-problem states without changing Stripe/backend contracts. Production connection, side effects, push and deployment: **0**.
+- Billing safety: read-only local evidence showed `trial_pending`, zero Stripe subscription references and zero checkout attempts/consents. Checkout-not-started no longer shows a fabricated exact first-billing timestamp; exact first-billing/renewal times render only for matching confirmed states with a timestamp.
+- Legal UX: Plan and Signup attach exact allowlisted return targets; Legal pages reject external/modified targets and choose Settings or Signup from Auth state when no target is supplied. Cancellation/Refund has explicit readable colors; desktop/390px axe contrast violations **0**; public Legal pages do not render BottomNav.
+- Branding: customer-facing frontend source contains no legacy `cross work` text; display branding remains `COROS WORK`.
+- Regression: Frontend Node tests **26 passed / 0 failed / 0 skipped**; TypeScript, ESLint, 27-route production build and `git diff --check` PASS. Authenticated real-local and isolated unauthenticated desktop/390px flows PASS.
+- Reproducibility: `docs/evidence/POST_CONTRACT_LEGAL_UX_CHECKPOINT_20261001.md` is included in this checkpoint. The exact commit and artifact SHA-256 are pinned by the repository-external manifest produced from the clean commit with `scripts/build_release_artifact.py`.
+- Remaining owner/external gates are unchanged: legal/publication approval; hosting/domain/DNS/TLS/CORS/secret store; Google verification; Stripe LIVE preparation; worker/monitoring and recurring backups; separately approved Production deployment/smoke.
+
 ## 2026-10-01 Post Financial Information Architecture checkpoint（最新）
 
 - Phase: **Financial information architecture frozen locally / external Production gates remain**. `/results` is the Financial analysis/detail source of truth, `/financials` is a recording-only workspace, Dashboard uses a shared compact current-month summary, and Customers is customer-first. Production connection, side effects, push and deployment: **0**.

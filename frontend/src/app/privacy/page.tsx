@@ -1,6 +1,7 @@
 ﻿import Link from "next/link";
 
 import { publicationReady } from "../../../config/publication";
+import { LegalBackLink } from "@/components/legal/LegalBackLink";
 
 const sections = [
   {
@@ -107,12 +108,7 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-12">
       <div className="mx-auto w-full max-w-3xl">
-        <Link
-          href="/register"
-          className="text-sm font-semibold text-emerald-700 hover:underline"
-        >
-          ← 新規登録へ戻る
-        </Link>
+        <LegalBackLink />
 
         <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-10">
           <div className="border-b border-slate-200 pb-6">
@@ -131,6 +127,7 @@ export default function PrivacyPage() {
             <p className="mt-3 text-xs text-slate-500">
               制定日：2026年9月6日
             </p>
+            <Link href="/contact" className="mt-3 inline-block text-sm font-semibold text-emerald-800 underline underline-offset-4">問い合わせ</Link>
           </div>
 
           <div className="mt-8 space-y-9">

@@ -4,7 +4,7 @@ import {createServer} from 'node:http';
 import {readFile,readdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
 const fixture=resolve('tests/ui/fixture.jsx');
-const result=await build({entryPoints:['tests/ui/entry.jsx'],bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},alias:Object.fromEntries(['@/lib/api','@/providers/AuthProvider','@/lib/supabase/client','@/services/account/accountService','next/navigation','next/link'].map(k=>[k,fixture]))});
+const result=await build({entryPoints:['tests/ui/entry.jsx'],bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env':'{"NODE_ENV":"development"}'},alias:Object.fromEntries(['@/lib/api','@/providers/AuthProvider','@/lib/supabase/client','@/services/account/accountService','next/navigation','next/link'].map(k=>[k,fixture]))});
 const cssNames=(await readdir('.next/static/chunks')).filter(n=>n.endsWith('.css'));
 if(!cssNames.length)throw new Error('Build production CSS first');
 const css=(await Promise.all(cssNames.map(n=>readFile(resolve('.next/static/chunks',n),'utf8')))).join('\n');

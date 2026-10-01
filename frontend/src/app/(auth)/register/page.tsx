@@ -199,14 +199,14 @@ export default function RegisterPage() {
 
             <span className="text-xs leading-5 text-slate-600">
               <Link
-                href="/terms"
+                href="/terms?returnTo=%2Fregister"
                 className="font-semibold text-emerald-700 hover:underline"
               >
                 利用規約
               </Link>
               {" "}と{" "}
               <Link
-                href="/privacy"
+                href="/privacy?returnTo=%2Fregister"
                 className="font-semibold text-emerald-700 hover:underline"
               >
                 プライバシーポリシー
