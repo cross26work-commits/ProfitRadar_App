@@ -25,10 +25,13 @@ try {
         }
         await page.screenshot({ path: resolve(output, `release-20260918-error-${name}.png`), fullPage: true });
         await button.click();
-        await page.getByText('今日の対応と収益').first().waitFor();
+        await page.getByText('今日の利益').first().waitFor();
       } else {
         if (route === '/financials') {
-          await page.getByText('今月の売上・入金・原価・粗利').waitFor();
+          await page.getByText('売上・入金・原価の記録').waitFor();
+          if (await page.getByText('今月の売上・入金・原価・粗利').count()) {
+            throw new Error(`Financial analysis duplicated on recording page at ${name}`);
+          }
         }
         await page.screenshot({ path: resolve(output, `release-20260918-${route.slice(1)}-${name}.png`), fullPage: true });
       }

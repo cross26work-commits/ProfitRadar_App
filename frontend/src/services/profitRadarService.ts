@@ -114,7 +114,6 @@ export type ReplyDashboardData = {
 };
 
 export type CustomersDashboardData = {
-  stats: StatItem[];
   customers: Customer[];
 };
 
@@ -214,15 +213,11 @@ export async function getReplyDashboard(): Promise<ReplyDashboardData> {
 
 export async function getCustomersDashboard(): Promise<CustomersDashboardData> {
   try {
-    const [customersResponse, apiStats] = await Promise.all([
-      apiGet<ApiCustomerListResponse>("/customers"),
-      getDashboardStats(),
-    ]);
+    const customersResponse = await apiGet<ApiCustomerListResponse>("/customers");
 
     const apiCustomers = customersResponse.items.map(mapApiCustomerToCustomer);
 
     return {
-      stats: apiStats,
       customers: apiCustomers,
     };
   } catch (error) {

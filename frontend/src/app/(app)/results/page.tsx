@@ -62,7 +62,7 @@ export default function ResultsPage() {
         description="実回収・見込利益・対応結果を確認します。"
       />
 
-      <FinancialSummary />
+      <FinancialSummary variant="full" />
       <p className="text-sm text-slate-500">以下は旧モデルの参考値です。上記の手動確定収益とは別集計です。</p>
       <ProfitSummarySection items={results.stats} />
 

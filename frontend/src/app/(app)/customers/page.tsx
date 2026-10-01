@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { CustomerListSection } from "@/components/sections/CustomerListSection";
 import { DashboardHeroSection } from "@/components/sections/DashboardHeroSection";
 import { PageStack } from "@/components/sections/PageStack";
-import { FinancialSummary } from "@/components/business/FinancialSummary";
 import {
   getCustomersDashboard,
   type CustomersDashboardData,
@@ -57,9 +56,6 @@ export default function CustomersPage() {
         title="顧客"
         description="顧客ごとの案件・利益・最終対応を確認します。"
       />
-
-      <FinancialSummary />
-      <p className="text-sm text-slate-500">顧客カードの候補額は旧モデルの参考値です。確定した入金・粗利ではありません。</p>
 
       <CustomerListSection
         title="顧客一覧"

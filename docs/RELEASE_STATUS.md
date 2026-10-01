@@ -1,5 +1,14 @@
 # Profit Radar release status
 
+## 2026-10-01 Post Financial Information Architecture checkpoint（最新）
+
+- Phase: **Financial information architecture frozen locally / external Production gates remain**. `/results` is the Financial analysis/detail source of truth, `/financials` is a recording-only workspace, Dashboard uses a shared compact current-month summary, and Customers is customer-first. Production connection, side effects, push and deployment: **0**.
+- Semantics: Dashboard and Results share `/financials/summary` and the same metric/null renderer. Normal values and `未記録・不明` states matched exactly; Financial calculation/API/JST behavior was not changed.
+- Empty/mobile behavior: zero reply/risk data produces matching advice and refresh CTA without an empty Danger card. Desktop browser checks passed; the 390px isolated actual-component fixture passed eight route/state checks with horizontal overflow 0 and BottomNav overlap 0.
+- Regression: Frontend Node tests **21 passed / 0 failed / 0 skipped**; TypeScript, ESLint, 27-route production build and `git diff --check` PASS.
+- Reproducibility: `docs/evidence/POST_FINANCIAL_IA_CHECKPOINT_20261001.md` is included in this checkpoint. The exact commit and artifact SHA-256 are pinned by the repository-external manifest produced from the clean commit with `scripts/build_release_artifact.py`.
+- Remaining owner/external gates are unchanged: legal/publication approval; hosting/domain/DNS/TLS/CORS/secret store; Google verification; Stripe LIVE preparation; worker/monitoring and recurring backups; separately approved Production deployment/smoke.
+
 ## 2026-10-01 Final local release checkpoint（最新）
 
 - Phase: **local release checkpoint frozen / external Production gates remain**. Local startup, authenticated onboarding, Legal + Support and visible UI cleanup are included in one reviewed source boundary. Push, deploy, Production connection, Google Production OAuth, Gmail send and Stripe LIVE activity: **0**.

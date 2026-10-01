@@ -8,6 +8,8 @@ type DangerLeadSectionProps = {
 };
 
 export function DangerLeadSection({ title = "現在の注意点", risks }: DangerLeadSectionProps) {
+  if (risks.length === 0) return null;
+
   return (
     <DetailPanel title={title}>
       <ActionBar>
