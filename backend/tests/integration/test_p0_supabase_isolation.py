@@ -3,6 +3,7 @@
 No manually supplied JWTs. Never enable against shared or production databases.
 """
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
@@ -17,9 +18,16 @@ from supabase import create_client
 
 def validate_target(url, expected, permission):
     p = urlsplit(url)
+    expected_port = 54321
+    fresh_project = os.getenv("P0_FRESH_MIGRATION_PROJECT_ID", "")
+    if fresh_project:
+        if (os.getenv("P0_FRESH_MIGRATION_TEST") != "ALLOW_FRESH_MIGRATION_FIXTURES"
+                or not re.fullmatch(r"profit-radar-fresh-proof-[0-9a-f]{12}", fresh_project)):
+            raise ValueError("Explicit matching disposable loopback target required")
+        expected_port = int(os.getenv("P0_FRESH_MIGRATION_API_PORT", "0"))
     if (permission != "CREATE_DISPOSABLE_FIXTURES" or url != expected
             or p.scheme != "http" or p.hostname not in {"127.0.0.1", "localhost"}
-            or p.port != 54321 or p.username or p.password
+            or p.port != expected_port or p.username or p.password
             or p.path not in {"", "/"} or p.query or p.fragment):
         raise ValueError("Explicit matching disposable loopback target required")
 
@@ -44,7 +52,7 @@ def environment():
     anon = os.environ["P0_SUPABASE_TEST_ANON_KEY"]
     service = create_client(url, os.environ["P0_SUPABASE_TEST_SERVICE_KEY"])
     from app.core import auth, company_context
-    from app.api import onboarding, leads, profit_events, reply, financials, account
+    from app.api import onboarding, leads, profit_events, reply, financials, account, auth as auth_api
     from app.routers import customers
     patch = pytest.MonkeyPatch()
     patch.setattr(auth, "SUPABASE_URL", url)
@@ -53,13 +61,14 @@ def environment():
     patch.setenv("SUPABASE_URL", url)
     patch.setenv("ACCOUNT_AUDIT_RETENTION_DAYS", "7")
     patch.setattr(onboarding, "get_supabase_client", lambda: service)
-    for module in (company_context, leads, profit_events, reply, customers, financials, account):
+    for module in (company_context, leads, profit_events, reply, customers, financials, account, auth_api):
         patch.setattr(module, "get_supabase_client", lambda: service)
     def forbidden_provider(*args, **kwargs):
         raise AssertionError("External provider must not be called in isolation tests")
     patch.setattr(reply, "build", forbidden_provider)
     app = FastAPI()
     app.include_router(onboarding.router)
+    app.include_router(auth_api.router)
     for module in (leads, profit_events, reply, customers, financials, account):
         app.include_router(module.router)
     api = TestClient(app)
@@ -86,13 +95,21 @@ def environment():
 
 
 def test_both_users_read_own_profile_only(environment):
-    actors = environment[2]
+    api, service, actors = environment
     assert actors[0][2]["company_id"] != actors[1][2]["company_id"]
     for index in range(2):
         browser, _, own = actors[index]
         other = actors[1-index][2]
         assert browser.table("profiles").select("id").eq("id", own["id"]).single().execute().data == {"id": own["id"]}
         assert browser.table("profiles").select("id").eq("id", other["id"]).execute().data == []
+        me = api.get("/auth/me", headers=actors[index][1])
+        assert me.status_code == 200
+        assert me.json()["onboarding_completed"] is True
+        assert me.json()["company_id"] == own["company_id"]
+        consent = service.table("company_business_consents").select(
+            "company_id,user_id,terms_version"
+        ).eq("company_id", own["company_id"]).single().execute().data
+        assert consent["user_id"] == own["user_id"]
 
 
 @pytest.mark.parametrize("table", ["customers", "messages", "profit_events", "gmail_connections"])
@@ -430,6 +447,33 @@ def test_support_internal_tables_are_browser_denied_and_service_readable(environ
             assert error.value.code == "42501"
 
 
+def test_support_rpc_and_billing_persistence_on_fresh_contract(environment):
+    _, service, actors = environment
+    own = actors[0][2]
+    if os.getenv("P0_FRESH_MIGRATION_PROJECT_ID"):
+        request_id = "PR-20261002-" + uuid4().hex[:12].upper()
+        result = service.rpc("create_support_request", {
+            "p_public_request_id": request_id,
+            "p_requester_user_id": own["user_id"],
+            "p_company_id": own["company_id"],
+            "p_requester_name": "Isolated fixture",
+            "p_requester_email": "support-fixture@example.invalid",
+            "p_company_name": "Isolated fixture",
+            "p_category": "technical",
+            "p_subject": "Fresh schema support check",
+            "p_body": "Synthetic support request for isolated schema verification.",
+            "p_abuse_key": "a" * 64,
+        }).execute().data
+        assert len(result) == 1 and result[0]["public_request_id"] == request_id
+        request_uuid = result[0]["id"]
+        assert len(service.table("support_messages").select("id").eq("request_id", request_uuid).execute().data) == 1
+        assert len(service.table("support_audit_logs").select("id").eq("request_id", request_uuid).execute().data) == 1
+    billing = service.table("company_billing").select("status,trial_ends_at").eq(
+        "company_id", own["company_id"]
+    ).single().execute().data
+    assert billing["status"] == "trialing" and billing["trial_ends_at"]
+
+
 def test_split_payment_idempotency_and_cross_company_rejection(environment):
     api,service,actors=environment
     _,headers,own=actors[0];_,other_headers,other=actors[1]
@@ -563,3 +607,26 @@ def test_service_role_reservations_and_deletion_status_require_rpc(environment):
             service.table(table).update({"company_id": company}).eq("company_id",company).execute()
         assert error.value.code == "42501"
         assert service.table(table).select("*").eq("company_id",company).execute().data == before
+
+
+def test_fresh_project_canonical_profile_and_profit_event_contract(environment):
+    _, service, actors = environment
+    profile = service.table("profiles").select("id,full_name").eq(
+        "id", actors[0][2]["id"]
+    ).single().execute().data
+    assert profile["full_name"] == "Isolated fixture"
+    if os.getenv("P0_FRESH_MIGRATION_PROJECT_ID"):
+        with pytest.raises(APIError) as missing_legacy:
+            service.table("profiles").select("name").limit(1).execute()
+        assert missing_legacy.value.code == "42703"
+    event = service.table("profit_events").select(
+        "id,gmail_thread_id,last_gmail_message_id,recoverable_profit,neglected_days,description"
+    ).eq("id", actors[0][2]["id"]).single().execute().data
+    assert set(event) == {
+        "id", "gmail_thread_id", "last_gmail_message_id",
+        "recoverable_profit", "neglected_days", "description",
+    }
+    assert event["id"] == actors[0][2]["id"]
+    assert event["recoverable_profit"] is None
+    assert event["neglected_days"] is None
+    assert event["description"] is None

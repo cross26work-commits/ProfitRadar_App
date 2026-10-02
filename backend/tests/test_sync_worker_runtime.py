@@ -1,4 +1,5 @@
 import json
+import socket
 from unittest.mock import Mock
 
 import pytest
@@ -49,5 +50,33 @@ def test_scheduler_configuration_fails_closed(monkeypatch, url):
 
 def test_health_server_rejects_non_loopback(monkeypatch):
     monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
-    with pytest.raises(RuntimeError, match="loopback"):
+    with pytest.raises(RuntimeError, match="exposure"):
         sync_worker.start_health_server(sync_worker.WorkerState())
+
+
+def test_railway_private_health_requires_production_and_matching_port(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("WORKER_HEALTH_EXPOSURE", "railway-private")
+    monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
+    monkeypatch.setenv("WORKER_HEALTH_PORT", "8025")
+    monkeypatch.setenv("PORT", "8026")
+    with pytest.raises(RuntimeError, match="must match PORT"):
+        sync_worker.start_health_server(sync_worker.WorkerState())
+
+
+def test_railway_private_health_binds_matching_platform_port(monkeypatch):
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("WORKER_HEALTH_EXPOSURE", "railway-private")
+    monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
+    monkeypatch.setenv("WORKER_HEALTH_PORT", str(port))
+    monkeypatch.setenv("PORT", str(port))
+    server = sync_worker.start_health_server(sync_worker.WorkerState())
+    try:
+        assert server.server_address[1] == port
+    finally:
+        server.shutdown()
+        server.server_close()

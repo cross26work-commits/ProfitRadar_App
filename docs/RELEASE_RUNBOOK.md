@@ -1,5 +1,7 @@
 # Profit Radar 公開・復旧・運営手順
 
+> 2026-10-02: `PRODUCTION_DEPLOYMENT_RUNBOOK.md`, `PRODUCTION_SUPABASE_MIGRATION_DECISION.md`, `PRODUCTION_ROLLBACK_PLAN.md`, and `PRODUCTION_SMOKE_TEST.md` are the current deployment-preparation entry points. The selected database target is a new Tokyo project, using only the hash-pinned fresh stream. This document does not authorize project creation, root-directory `db push`, replaying remote-only v1/v2, or migration apply.
+
 ## 2026-09-30 通常ローカル起動
 
 1. Docker Desktop / Engineを通常起動する。prune、volume削除、Supabase resetは不要。

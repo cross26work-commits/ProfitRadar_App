@@ -15,13 +15,13 @@ SPEC.loader.exec_module(runner)
 
 
 @pytest.mark.parametrize("ref,flag,url", [
-    ("other", runner.CONFIRMATION, runner.URL),
-    (runner.PROJECT_REF, "", runner.URL),
-    (runner.PROJECT_REF, runner.CONFIRMATION, "http://127.0.0.1:54321"),
+    ("other", runner.CONFIRMATION_PREFIX + ":abcdefghijklmnopqrst", "https://abcdefghijklmnopqrst.supabase.co"),
+    ("abcdefghijklmnopqrst", "", "https://abcdefghijklmnopqrst.supabase.co"),
+    ("abcdefghijklmnopqrst", runner.CONFIRMATION_PREFIX + ":abcdefghijklmnopqrst", "http://127.0.0.1:54321"),
 ])
 def test_production_gate_rejects_mismatch(ref, flag, url):
     with pytest.raises(runner.GateError, match="gate not satisfied"):
-        runner.validate_gate(ref, flag, url)
+        runner.validate_gate(ref, flag, url, "abcdefghijklmnopqrst")
 
 
 def test_runner_has_no_provider_or_disposable_isolation_invocation():
@@ -51,61 +51,6 @@ def test_disposable_local_auth_and_cleanup(monkeypatch):
     keys = local_credentials()
     local_url = "http://127.0.0.1:54321"
     monkeypatch.setattr(runner, "URL", local_url)
-    # The default disposable DB predates production v2's canonical RPC ACL.
-    # Use explicit local service-role fixture registration; the canonical RPC
-    # itself is covered by the separate v2 synthetic-DB JWT validator.
-    def local_register(service, anon, run_marker, index, actors):
-        import secrets
-        from uuid import uuid4
-        marker = f"PR-PROD-E2E-{run_marker}-{index}"
-        email = f"pr-e2e-{run_marker}-{index}@example.invalid"
-        password = secrets.token_urlsafe(40)
-        actor = {"marker": marker, "auth_outcome_unknown": True}
-        actors.append(actor)
-        actor["stage"] = "local-auth-create"
-        user = service.auth.admin.create_user({"email": email, "password": password,
-                                               "email_confirm": True}).user
-        actor["user_id"] = str(user.id)
-        actor["auth_outcome_unknown"] = False
-        actor["stage"] = "local-auth-login"
-        browser = create_client(local_url, anon)
-        session = browser.auth.sign_in_with_password({"email": email, "password": password}).session
-        actor["stage"] = "local-company-insert"
-        # Local default PostgREST does not grant service INSERT on companies.
-        # SQL fixture creation is confined to the validated disposable DB.
-        import subprocess
-        def local_sql(statement):
-            completed = subprocess.run(["docker", "exec", "-i",
-                "supabase_db_profit-radar-disposable", "psql", "-X", "-q", "-At", "-h",
-                "/var/run/postgresql", "-U", "postgres", "-d", "postgres",
-                "-v", "ON_ERROR_STOP=1", "-f", "-"], input=statement.encode(),
-                capture_output=True, timeout=30, check=False)
-            assert completed.returncode == 0, "Disposable fixture SQL failed: " + completed.stderr.decode("utf-8", "replace").splitlines()[0]
-            return completed.stdout.decode().strip().splitlines()[0]
-        actor["company_id"] = local_sql("insert into public.companies(name) "
-            f"values ('{marker}') returning id;")
-        actor["stage"] = "local-profile-insert"
-        actor["profile_id"] = local_sql("insert into public.profiles(user_id,company_id,name,full_name,email,role) "
-            f"values ('{actor['user_id']}','{actor['company_id']}','{marker}','{marker}','{email}','owner') returning id;")
-        browser.postgrest.auth(session.access_token)
-        actor["browser"] = browser
-        actor["headers"] = {"Authorization": "Bearer " + session.access_token}
-        return actor
-    monkeypatch.setattr(runner, "register_actor", local_register)
-    production_verify = runner.verify
-    monkeypatch.setattr(runner, "verify", lambda service, anon, patch, actors:
-                        production_verify(service, anon, patch, actors,
-                                          require_company_owner=False))
-    production_one_row = runner.one_row
-    def local_one_row(service, table, row_id, fields, expected):
-        if table == "companies":
-            fields = "id,name"
-            expected = {"name": expected["name"]}
-        return production_one_row(service, table, row_id, fields, expected)
-    monkeypatch.setattr(runner, "one_row", local_one_row)
-    production_cleanup = runner.cleanup
-    monkeypatch.setattr(runner, "cleanup", lambda service, actors:
-                        production_cleanup(service, actors, owner_filter=False))
     result = runner.exercise(create_client(local_url, keys["service_role"]), keys["anon"],
                              monkeypatch, record=False)
     assert result == {"result": "PASS", "cleanup": "PASS",

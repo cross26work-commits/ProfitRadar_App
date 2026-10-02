@@ -22,6 +22,7 @@ frontend/.env.*
 backups/
 _backups/
 supabase/.temp/
+**/supabase/.temp/
 backup-*/
 .local-isolated/
 .local-isolated-*/

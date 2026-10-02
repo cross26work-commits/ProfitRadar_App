@@ -17,6 +17,7 @@ def production_values():
         "STRIPE_PRICE_ID": "price_fixture", "OPENAI_MODEL_PRIMARY": "terra",
         "WORKER_HEALTH_HOST": "127.0.0.1", "WORKER_HEALTH_PORT": "8025",
         "WORKER_HEALTH_URL": "http://127.0.0.1:8025", "GMAIL_SYNC_INTERVAL_SECONDS": "300",
+        "WORKER_HEALTH_EXPOSURE": "loopback",
         "WORKER_MAX_BACKOFF_SECONDS": "3600", "MONITORING_WEBHOOK_URL": "https://alerts.example.com",
         "ACCOUNT_AUDIT_RETENTION_DAYS": "365",
         "SUPPORT_ADMIN_USER_IDS": "00000000-0000-4000-8000-000000000001",
@@ -128,4 +129,31 @@ def test_production_rejects_missing_monitoring_and_unsafe_worker_defaults(monkey
     set_production(monkeypatch)
     monkeypatch.setenv("GMAIL_SYNC_INTERVAL_SECONDS", "0")
     with pytest.raises(RuntimeError, match="operational limits"):
+        validate_production()
+
+
+def test_production_accepts_explicit_railway_private_worker_health(monkeypatch):
+    set_production(monkeypatch)
+    monkeypatch.setenv("WORKER_HEALTH_EXPOSURE", "railway-private")
+    monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
+    monkeypatch.setenv("WORKER_HEALTH_URL", "http://worker.railway.internal:8025")
+    validate_production()
+
+
+def test_production_rejects_mismatched_private_worker_port(monkeypatch):
+    set_production(monkeypatch)
+    monkeypatch.setenv("WORKER_HEALTH_EXPOSURE", "railway-private")
+    monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
+    monkeypatch.setenv("WORKER_HEALTH_URL", "http://worker.railway.internal:9000")
+    with pytest.raises(RuntimeError, match="operational limits"):
+        validate_production()
+
+
+@pytest.mark.parametrize("url", ["http://worker.example.com:8025", "https://worker.railway.internal:8025"])
+def test_production_rejects_non_private_worker_health(monkeypatch, url):
+    set_production(monkeypatch)
+    monkeypatch.setenv("WORKER_HEALTH_EXPOSURE", "railway-private")
+    monkeypatch.setenv("WORKER_HEALTH_HOST", "0.0.0.0")
+    monkeypatch.setenv("WORKER_HEALTH_URL", url)
+    with pytest.raises(RuntimeError, match="monitoring endpoints"):
         validate_production()

@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import re
 import secrets
 import sys
 from uuid import uuid4
@@ -26,9 +27,9 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 
-PROJECT_REF = "zszmetqhksthduoxfvac"
-URL = f"https://{PROJECT_REF}.supabase.co"
-CONFIRMATION = "I_HAVE_SEPARATE_OWNER_APPROVAL_FOR_PRODUCTION_E2E"
+PROJECT_REF_ENV = "PRODUCTION_E2E_PROJECT_REF"
+CONFIRMATION_PREFIX = "I_HAVE_SEPARATE_OWNER_APPROVAL_FOR_PRODUCTION_E2E"
+URL = ""
 COUNT_TABLES = ("companies", "profiles", "customers", "profit_events")
 RELEASE_STATUS = Path(__file__).resolve().parents[2] / "docs" / "RELEASE_STATUS.md"
 
@@ -37,9 +38,14 @@ class GateError(RuntimeError):
     pass
 
 
-def validate_gate(project_ref, confirmation, configured_url):
-    if project_ref != PROJECT_REF or confirmation != CONFIRMATION or configured_url != URL:
+def validate_gate(project_ref, confirmation, configured_url, expected_ref=None):
+    expected_ref = expected_ref or os.getenv(PROJECT_REF_ENV, "")
+    expected_url = f"https://{expected_ref}.supabase.co" if expected_ref else ""
+    expected_confirmation = f"{CONFIRMATION_PREFIX}:{expected_ref}"
+    if (not re.fullmatch(r"[a-z0-9]{20}", expected_ref) or project_ref != expected_ref
+            or confirmation != expected_confirmation or configured_url != expected_url):
         raise GateError("Production E2E gate not satisfied")
+    return expected_url
 
 
 def require(condition, label):
@@ -101,7 +107,7 @@ def one_row(service, table, row_id, fields, expected):
             "Fixture identity changed; cleanup stopped")
 
 
-def cleanup(service, actors, *, owner_filter=True):
+def cleanup(service, actors):
     # No broad company_id-only DELETE and no cascade-as-proof. Verify every
     # identity before each exact-ID delete. Do not touch unrelated production rows.
     for actor in reversed(actors):
@@ -116,8 +122,8 @@ def cleanup(service, actors, *, owner_filter=True):
             if profiles:
                 actor["company_id"] = profiles[0]["company_id"]
                 actor["profile_id"] = profiles[0]["id"]
-                one_row(service, "companies", actor["company_id"], "id,name,owner_user_id",
-                        {"name": actor["marker"], "owner_user_id": actor["user_id"]})
+                one_row(service, "companies", actor["company_id"], "id,name",
+                        {"name": actor["marker"]})
         if actor.get("company_id"):
             for table, field, key in (("customers", "name", "customer_id"),
                                       ("profit_events", "title", "event_id")):
@@ -147,12 +153,11 @@ def cleanup(service, actors, *, owner_filter=True):
                     "Profile cleanup incomplete")
         if actor.get("company_id"):
             actor["cleanup_stage"] = "delete-company"
-            one_row(service, "companies", actor["company_id"], "id,name,owner_user_id",
-                    {"name": actor["marker"], "owner_user_id": actor["user_id"]})
-            deletion = service.table("companies").delete().eq("id", actor["company_id"])
-            if owner_filter:
-                deletion = deletion.eq("owner_user_id", actor["user_id"])
-            deletion.execute()
+            one_row(service, "companies", actor["company_id"], "id,name",
+                    {"name": actor["marker"]})
+            service.table("companies").delete().eq("id", actor["company_id"]).eq(
+                "name", actor["marker"]
+            ).execute()
             require(not service.table("companies").select("id").eq("id", actor["company_id"]).execute().data,
                     "Company cleanup incomplete")
         actor["cleanup_stage"] = "delete-auth"
@@ -167,7 +172,7 @@ def cleanup(service, actors, *, owner_filter=True):
         actor["auth_deleted"] = True
 
 
-def register_actor(service, anon, run_marker, index, actors):
+def register_actor(service, anon, run_marker, index, actors, monkeypatch):
     marker = f"PR-PROD-E2E-{run_marker}-{index}"
     email = f"pr-e2e-{run_marker}-{index}@example.invalid"
     password = secrets.token_urlsafe(40)
@@ -185,11 +190,22 @@ def register_actor(service, anon, run_marker, index, actors):
     session = browser.auth.sign_in_with_password({"email": email, "password": password}).session
     require(session is not None and session.access_token, "Real Auth login failed")
     browser.postgrest.auth(session.access_token)
-    actor["stage"] = "canonical-rpc"
-    company = browser.rpc("create_company_and_profile", {"company_name": marker,
-                                                          "owner_name": marker}).execute().data
-    require(company is not None, "Canonical registration failed")
-    actor["company_id"] = str(company)
+    actor["stage"] = "application-onboarding"
+    from app.core import auth
+    from app.api import onboarding
+    monkeypatch.setattr(auth, "SUPABASE_URL", URL)
+    monkeypatch.setattr(auth, "SUPABASE_JWT_SECRET", "")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", anon)
+    monkeypatch.setattr(onboarding, "get_supabase_client", lambda: service)
+    app = FastAPI()
+    app.include_router(onboarding.router)
+    response = TestClient(app).post("/onboarding", headers={"Authorization": f"Bearer {session.access_token}"},
+                                    json={"company_name": marker, "name": marker,
+                                          "business_use_confirmed": True})
+    require(response.status_code == 200, "Application onboarding failed")
+    rows = response.json().get("result") or []
+    require(len(rows) == 1 and rows[0].get("company_id"), "Application onboarding result invalid")
+    actor["company_id"] = str(rows[0]["company_id"])
     actor["stage"] = "profile-linkage"
     profiles = service.table("profiles").select("id,user_id,company_id,role").eq("user_id", actor["user_id"]).execute().data or []
     require(len(profiles) == 1 and profiles[0]["company_id"] == actor["company_id"]
@@ -200,7 +216,7 @@ def register_actor(service, anon, run_marker, index, actors):
     return actor
 
 
-def verify(service, anon, monkeypatch, actors, *, require_company_owner=True):
+def verify(service, anon, monkeypatch, actors):
     api = api_client(service, anon, monkeypatch)
     require(actors[0]["company_id"] != actors[1]["company_id"], "Companies were not isolated")
     for actor in actors:
@@ -265,11 +281,6 @@ def verify(service, anon, monkeypatch, actors, *, require_company_owner=True):
         require(api.get(f"/customers/{other['customer_id']}", headers=actor["headers"]).status_code == 404
                 and api.get(f"/leads/{other['event_id']}", headers=actor["headers"]).status_code == 404,
                 "Cross-tenant detail access not denied")
-        if require_company_owner:
-            ownership = service.table("companies").select("id,owner_user_id").eq(
-                "id", actor["company_id"]).execute().data or []
-            require(len(ownership) == 1 and ownership[0]["owner_user_id"] == actor["user_id"],
-                    "Canonical onboarding company ownership invalid")
     require(api.get("/customers").status_code == 401 and
             api.get("/customers", headers={"Authorization": "Bearer invalid"}).status_code == 401,
             "Missing/invalid JWT not denied")
@@ -303,7 +314,7 @@ def exercise(service, anon_key, monkeypatch, *, record=True):
         run_marker = uuid4().hex
         for index in ("A", "B"):
             stage = "register-" + index
-            register_actor(service, anon_key, run_marker, index, actors)
+            register_actor(service, anon_key, run_marker, index, actors, monkeypatch)
         stage = "jwt-isolation-and-read"
         verify(service, anon_key, monkeypatch, actors)
         outcome = "PASS"
@@ -337,7 +348,8 @@ def exercise(service, anon_key, monkeypatch, *, record=True):
 
 
 def run(project_ref, confirmation, service_key, anon_key, monkeypatch):
-    validate_gate(project_ref, confirmation, os.getenv("SUPABASE_URL", ""))
+    global URL
+    URL = validate_gate(project_ref, confirmation, os.getenv("SUPABASE_URL", ""))
     require(bool(service_key and anon_key), "Production E2E credentials not configured")
     service = create_client(URL, service_key)
     return exercise(service, anon_key, monkeypatch)

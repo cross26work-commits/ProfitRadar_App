@@ -111,9 +111,16 @@ def health_handler(state):
 
 def start_health_server(state):
     host = os.getenv("WORKER_HEALTH_HOST", "127.0.0.1")
-    if host not in {"127.0.0.1", "localhost"}:
-        raise RuntimeError("Worker health endpoint must bind to loopback")
-    port = int(os.getenv("WORKER_HEALTH_PORT", "8025"))
+    exposure = os.getenv("WORKER_HEALTH_EXPOSURE", "loopback")
+    production = os.getenv("APP_ENV") == "production"
+    railway_private = production and exposure == "railway-private" and host == "0.0.0.0"
+    if host not in {"127.0.0.1", "localhost"} and not railway_private:
+        raise RuntimeError("Worker health endpoint exposure is invalid")
+    configured_port = os.getenv("WORKER_HEALTH_PORT", "8025")
+    railway_port = os.getenv("PORT", "") if railway_private else ""
+    if railway_private and (not railway_port or configured_port != railway_port):
+        raise RuntimeError("Railway worker health port must match PORT")
+    port = int(railway_port or configured_port)
     if not 1 <= port <= 65535:
         raise RuntimeError("Invalid worker health port")
     server = ThreadingHTTPServer((host, port), health_handler(state))
@@ -133,7 +140,7 @@ def main(argv=None):
     scheduler_config()  # Fail before advertising health.
     if os.getenv("APP_ENV") == "production" and any(not os.getenv(name, "").strip() for name in (
             "GMAIL_SYNC_INTERVAL_SECONDS", "WORKER_MAX_BACKOFF_SECONDS",
-            "WORKER_HEALTH_HOST", "WORKER_HEALTH_PORT")):
+            "WORKER_HEALTH_HOST", "WORKER_HEALTH_PORT", "WORKER_HEALTH_EXPOSURE")):
         raise RuntimeError("Production worker settings must be explicit")
     interval = int(os.getenv("GMAIL_SYNC_INTERVAL_SECONDS", "300"))
     maximum = int(os.getenv("WORKER_MAX_BACKOFF_SECONDS", "3600"))

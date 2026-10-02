@@ -1,5 +1,35 @@
 # Profit Radar release status
 
+## 2026-10-02 Pre-Production infrastructure checkpoint（最新）
+
+- Scope: Production deployment preparation and the verified fresh-project migration stream are frozen as one immutable source checkpoint. Exact commit and artifact SHA-256 are recorded in the repository-external content-addressed manifest produced from the clean commit.
+- Fresh database gate: target **NEW TOKYO PROJECT** (`ap-northeast-1`); 23 hash-pinned staged migrations; three zero-state runs PASS; 37 public tables; canonical metadata SHA-256 `55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D`; application integration 35/0 each; historical migrations modified 0; manual DB patch required NO.
+- Regression: isolated integration 35/0, Backend 360/0, Frontend 26/0, TypeScript/ESLint/27-route build, compileall, pip check/audit, npm audit 0, migration/evidence validators and `git diff --check` PASS.
+- Commit review: nested Supabase CLI `.temp` output is ignored and excluded. Candidate secret scan: 505 files / 0 findings. Local env files, logs, database/archive artifacts, dependency/build outputs and `.local-*` directories are not part of the checkpoint.
+- Production connection/project creation/migration/deploy/DNS/provider action in this checkpoint: **0**. This checkpoint is not Production apply or deployment approval.
+- Evidence: `docs/evidence/PRE_PRODUCTION_INFRA_CHECKPOINT_20261002.md`. Next owner action is to create the new Tokyo Supabase Production project and record its project ref without sharing secrets.
+
+## 2026-10-02 Fresh Production migration repair（最新）
+
+- Phase: **fresh migration blocker resolved locally / new Tokyo project creation and apply approval pending**. Target is a new Supabase project in `ap-northeast-1`. Production connections and Production side effects in this repair: **0**.
+- Root cause: remote-only v1/v2 pin the old remote schema and v1 aborts the canonical fresh chain on `profiles.name`. An appended migration cannot repair an earlier abort. Historical migrations were not edited; the fresh stream explicitly excludes only those two exact-hash remote supplements.
+- Repair: hash-pinned empty-project guard + 21 normal application migrations + additive fresh current-contract completion = **23 staged migrations**. Completion supplies five nullable current `profit_events` fields and narrows service-role writes on internal tables. Manual patching: **0**.
+- Fresh proof: three independent zero-state Supabase projects PASS; each produced 37 public tables, identical schema SHA-256 `55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D`, and real local Auth/PostgREST application integration **35 passed / 0 skipped**. RLS/policies/functions/triggers/grants/service-role restrictions and guard replay PASS.
+- Regression: existing isolated integration **35 passed / 0 skipped**; Backend **360 passed / 0 skipped**; Frontend **26 passed / 0 skipped**; compileall, pip check/audit, TypeScript, ESLint, 27-route production build, npm audit 0, secret scan 0 and `git diff --check` PASS.
+- Evidence: `docs/evidence/FRESH_PRODUCTION_MIGRATION_20261002.json` and `.md`. Production must not run the root migration directory; use the staged fresh stream only after a separate owner apply approval.
+- Next: owner creates the new Tokyo project and records its 20-character ref. No Production link, migration, deploy, Gmail send or Stripe action has been performed.
+
+## 2026-10-02 Production deployment preparation（履歴・上のfresh repairによりDB判定更新済み）
+
+- Phase at that checkpoint: **local deployment preparation complete / Production database target decision was BLOCKED / not deployed**. The fresh repair section above supersedes only its database decision. Baseline commit `4de25c344b1816aa1cfb33d46c8e9aecf3fe9820`; no commit/push/deploy/DNS/provider change or Production DB write occurred.
+- Prepared: Railway frontend/backend/private-worker contract, full environment matrix, gated preflight, artifact/migration/secret checks, approval-gated read-only smoke, DNS plan, monitoring, backup/restore, rollback, owner checklist, Google/Stripe LIVE preparation links.
+- Worker: Railway-private `0.0.0.0:$PORT` health is allowed only by explicit Production mode; loopback remains default. Isolated backend/readiness/scheduler/heartbeat PASS, Gmail sends 0.
+- Database Gate: static 22-migration audit PASS and established disposable JWT/RLS integration **33/0**. A new empty local Supabase applied through `202609110001`, then the remote-specific v1 forward aborted transactionally on `profiles.name`; therefore a new Tokyo project cannot receive the directory unchanged. Historical project continuation vs a separately approved fresh-project migration stream must be decided. No historical file was modified.
+- Security dependencies: urllib3 2.8.0, PyJWT 2.15.1 and Next.js toolchain 16.3.8 remediate current audit findings. pip-audit and npm audit: 0 known vulnerabilities.
+- Regression: Backend **356 passed / 0 skipped**, Frontend Node **26 passed / 0 skipped**, TypeScript/ESLint/27-route build, compileall, pip check, dependency audits, migration/static checks, candidate secret scan and diff check PASS.
+- Incident transparency: before global pytest isolation was added, one invalid-token unit test inherited an ignored developer `.env` and attempted a read-only Auth GET to the historical Supabase URL; it failed with 503, used no valid token/customer data and performed no write. Subsequent runs are forced to loopback/synthetic auth. Production side effects: **0**; cumulative Production connection attempts in this preparation turn are not zero.
+- Evidence: `docs/evidence/PRODUCTION_DEPLOYMENT_PREPARATION_20261002.md`. Resume at `PRODUCTION_SUPABASE_MIGRATION_DECISION.md`; do not deploy or run Production preflight until the target decision and fresh/target-appropriate migration evidence are PASS.
+
 ## 2026-10-01 Post Contract / Legal UX checkpoint（最新）
 
 - Phase: **Contract/Legal UX frozen locally / external Production gates remain**. Checkout/subscription state presentation now distinguishes checkout-not-started, incomplete, card-registered trial, active, canceled and payment-problem states without changing Stripe/backend contracts. Production connection, side effects, push and deployment: **0**.

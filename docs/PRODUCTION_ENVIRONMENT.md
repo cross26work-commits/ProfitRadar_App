@@ -1,5 +1,7 @@
 # Production environment contract
 
+> 2026-10-02: the deployable three-service topology and complete variable ownership are maintained in `PRODUCTION_ARCHITECTURE.md`, `PRODUCTION_ENVIRONMENT_MATRIX.md`, and `deploy/railway/service-plan.json`. This file remains the lower-level application contract.
+
 This document is a deployment contract, not an environment file. Secret values belong in a server-side secret store and must never be committed, copied into frontend variables, printed, or placed in unit files. The machine-readable inventory is `deploy/production-env.schema.json`.
 
 ## Separation and startup gate

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "target": "new-supabase-project-only",
+  "region": "ap-northeast-1",
+  "baseline_commit": "4de25c344b1816aa1cfb33d46c8e9aecf3fe9820",
+  "canonical_schema_sha256": "55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D",
+  "guard": {
+    "source": "deploy/fresh-production/supabase/migrations/20261002094539_fresh_project_empty_guard.sql",
+    "staged_file": "20261002094539_fresh_project_empty_guard.sql",
+    "sha256": "CC8F3177D147BD94ADB8D12423FE0F376D6DC87DC45C021B9E59A3BEF1291631"
+  },
+  "completion": {
+    "source": "deploy/fresh-production/supabase/migrations/20261002095741_fresh_current_contract_completion.sql",
+    "staged_file": "20261002094622_fresh_current_contract_completion.sql",
+    "sha256": "78282E4A44F01494E44B3F8003F8B4959915B657855B49D788325EF01E9FAE70"
+  },
+  "migrations": [
+    {"source":"202607020001_profit_radar_core.sql","staged_file":"20261002094601_profit_radar_core.sql","sha256":"FC4E55F54F7582724D7D6898A4FD454903808FE6426E2AF71C4B3793B8552BBE"},
+    {"source":"202609060001_reply_logs_gmail_bridge.sql","staged_file":"20261002094602_reply_logs_gmail_bridge.sql","sha256":"BB6CA1C7007068FD287ABCC12B1FE2268FB987634771E5A950DE888B28BE55FD"},
+    {"source":"202609070001_release_candidate_safety.sql","staged_file":"20261002094603_release_candidate_safety.sql","sha256":"A754C397D9FDEC01E59500670818F948C2B1EC9D02BAD68FBDDE040853CFFD8E"},
+    {"source":"202609090001_p0_tenant_rls_onboarding.sql","staged_file":"20261002094604_p0_tenant_rls_onboarding.sql","sha256":"775E749A248EA1C76C5DD60C3491AAD8724F88E61C706C99BA204ADEBE14766E"},
+    {"source":"202609090002_saved_reply_drafts.sql","staged_file":"20261002094605_saved_reply_drafts.sql","sha256":"2CA794AA0767C9BE479A9C6A44FA07DEB879F94842F17EB0F826CEF302EC396C"},
+    {"source":"202609090003_send_operations.sql","staged_file":"20261002094606_send_operations.sql","sha256":"BBF58497A694815886F3AEE3380A4BCDD994975E29C4ED2BF54AEF1E45186E94"},
+    {"source":"202609090004_gmail_sync_runtime.sql","staged_file":"20261002094607_gmail_sync_runtime.sql","sha256":"03C5318F80BF8BEBE7D62DF8DDF1E5376A7EA81D0A1E8CF02C678BD2411CCF6F"},
+    {"source":"202609090005_trial_billing.sql","staged_file":"20261002094608_trial_billing.sql","sha256":"2092C9B4273632A37A6D28584E986D1B7043D6985E42C6E78C39B6698BE1850A"},
+    {"source":"202609090006_ai_usage.sql","staged_file":"20261002094609_ai_usage.sql","sha256":"860B4C641A4F6CD56D0DC5402CCE6F207BEC35F3B896FE6AF6CD87B8DEAD0E55"},
+    {"source":"202609090007_checkout_attempts.sql","staged_file":"20261002094610_checkout_attempts.sql","sha256":"CE98F463532E4E1A6D280B98493822677E852F5FB85C4BA7FA662242E76BE3C2"},
+    {"source":"202609100001_repair_runtime_schema.sql","staged_file":"20261002094611_repair_runtime_schema.sql","sha256":"B29CC59B872DBAB1951277CCBA7750F07AAE86D70325AB53897786D0458EDD09"},
+    {"source":"202609100002_atomic_gmail_sync.sql","staged_file":"20261002094612_atomic_gmail_sync.sql","sha256":"142DA72E2F6D102FCBE7D15DD68025D4B94E4A7774BE0425E935934B4ECB3689"},
+    {"source":"202609100003_operator_recovery.sql","staged_file":"20261002094613_operator_recovery.sql","sha256":"A3FA9A0066D0BC3D320F5E9091BDEFC13BACE26541D610399F972B428686F708"},
+    {"source":"202609100004_financial_records.sql","staged_file":"20261002094614_financial_records.sql","sha256":"B6BA95C20977F4C1F8BEB61687EAC49A489EC0260D612D755275F7EDBD20B186"},
+    {"source":"202609100005_ai_hard_budget.sql","staged_file":"20261002094615_ai_hard_budget.sql","sha256":"52A33BDB49522403E111FDBE66E3EE31546F891EEA386838E5118595A1509A4D"},
+    {"source":"202609100006_account_deletion.sql","staged_file":"20261002094616_account_deletion.sql","sha256":"02DCEC31839A812DEDCEB5BD30E496C026056C8C45043A65E17F7DF29769655B"},
+    {"source":"202609100007_payment_entries.sql","staged_file":"20261002094617_payment_entries.sql","sha256":"F0DDA54AD7D9148E421C764B4100781C035D2AAE6BB539871AEECCD1F7167CE2"},
+    {"source":"202609100008_provider_recovery.sql","staged_file":"20261002094618_provider_recovery.sql","sha256":"C9A5BD612118A20A60712511F595C324C54B4A65C3B8AC5C76A5534AB4CF2A0B"},
+    {"source":"202609110001_billing_production_gate.sql","staged_file":"20261002094619_billing_production_gate.sql","sha256":"C94E573F047BAACAADDBC3FFB2BB9AA53F87C37A85CF6DDF98795F240770EA54"},
+    {"source":"20260928153027_legal_support_admin.sql","staged_file":"20261002094620_legal_support_admin.sql","sha256":"1E6F0552AF813768679895DECD7100C226EB8605462AB0EC4A5311A1B859D23E"},
+    {"source":"20261002114404_fix_support_request_ambiguity.sql","staged_file":"20261002094621_fix_support_request_ambiguity.sql","sha256":"F729828BDA4B1EF6AD52D88AF567FF1686ECAF9255EAA434F8CE6F33A453C7B0"}
+  ],
+  "excluded_remote_supplements": [
+    {
+      "source": "202609140001_remote_schema_forward.sql",
+      "sha256": "0027F2B1740804DB72242F8511F13445C6118E8AB22ED72D6D191B999F7C049F",
+      "reason": "Pinned repair for a historical remote baseline; its profiles.name prerequisite is intentionally incompatible with a fresh schema."
+    },
+    {
+      "source": "202609150001_remote_schema_forward_v2.sql",
+      "sha256": "B5152C99E1368989FB35203686DB3D29CB395362C1E8282D6F1F9BBB8EDC86F0",
+      "reason": "Pinned second-stage repair for the same historical remote baseline; all current objects are already created by the fresh stream."
+    }
+  ]
+}

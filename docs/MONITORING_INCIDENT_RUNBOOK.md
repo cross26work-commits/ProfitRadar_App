@@ -2,7 +2,7 @@
 
 ## Signals
 
-- `runtime_probe`: public frontend, backend `/health`, backend `/ready`, loopback worker `/health` and `/ready`.
+- `runtime_probe`: public frontend, backend `/health`, backend `/ready`, and worker `/health` plus `/ready`. Local/systemd uses loopback; Railway uses the explicitly gated private-only `*.railway.internal` endpoint and no public worker domain.
 - `sync_worker`: structured batch success/failure and consecutive failure count; no URL/header/body/tenant value.
 - `maintenance`: unresolved/unknown sends, pending deletions, reserved AI, stale Gmail locks, recent/stuck Gmail runs and recent failed/fallback AI runs. Counts only.
 - Reverse-proxy/API monitoring must alert on non-2xx `/billing/webhook`; do not include request bodies or `Stripe-Signature`.

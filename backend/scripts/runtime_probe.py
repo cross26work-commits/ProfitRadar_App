@@ -12,11 +12,14 @@ from urllib.parse import urlsplit
 import requests
 
 
-def endpoint(name, *, loopback=False):
+def endpoint(name, *, loopback=False, railway_private=False):
     raw = os.getenv(name, "").rstrip("/")
     parsed = urlsplit(raw)
-    allowed = parsed.scheme == "https" or (loopback and parsed.scheme == "http"
-                                             and parsed.hostname in {"localhost", "127.0.0.1"})
+    private_allowed = (railway_private and os.getenv("WORKER_HEALTH_EXPOSURE") == "railway-private"
+                       and parsed.scheme == "http" and bool(parsed.hostname)
+                       and parsed.hostname.endswith(".railway.internal"))
+    allowed = parsed.scheme == "https" or private_allowed or (loopback and parsed.scheme == "http"
+                                                                and parsed.hostname in {"localhost", "127.0.0.1"})
     if (not allowed or not parsed.hostname or parsed.username or parsed.password
             or parsed.query or parsed.fragment or parsed.path not in {"", "/"}):
         raise ValueError("Monitoring endpoint configuration invalid")
@@ -28,8 +31,8 @@ def check(get=requests.get):
         "frontend": (endpoint("FRONTEND_URL"), "/"),
         "backend_health": (endpoint("BACKEND_URL"), "/health"),
         "backend_readiness": (endpoint("BACKEND_URL"), "/ready"),
-        "worker_heartbeat": (endpoint("WORKER_HEALTH_URL", loopback=True), "/health"),
-        "worker_readiness": (endpoint("WORKER_HEALTH_URL", loopback=True), "/ready"),
+        "worker_heartbeat": (endpoint("WORKER_HEALTH_URL", loopback=True, railway_private=True), "/health"),
+        "worker_readiness": (endpoint("WORKER_HEALTH_URL", loopback=True, railway_private=True), "/ready"),
     }
     statuses = {}
     for name, (base, path) in targets.items():

@@ -1,0 +1,48 @@
+{
+  "status": "PASS",
+  "target": "NEW TOKYO PROJECT",
+  "runs": [
+    {
+      "run": 1,
+      "status": "PASS",
+      "migrations": 23,
+      "tables": 37,
+      "integration": "35 passed, 6 warnings in 12.13s",
+      "schema_sha256": "55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D",
+      "production_connections": 0,
+      "production_side_effects": 0
+    },
+    {
+      "run": 2,
+      "status": "PASS",
+      "migrations": 23,
+      "tables": 37,
+      "integration": "35 passed, 6 warnings in 12.07s",
+      "schema_sha256": "55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D",
+      "production_connections": 0,
+      "production_side_effects": 0
+    },
+    {
+      "run": 3,
+      "status": "PASS",
+      "migrations": 23,
+      "tables": 37,
+      "integration": "35 passed, 6 warnings in 11.87s",
+      "schema_sha256": "55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D",
+      "production_connections": 0,
+      "production_side_effects": 0
+    }
+  ],
+  "repeat": 3,
+  "fresh_stream_migrations": 23,
+  "canonical_schema_parity": "PASS",
+  "manual_db_patch_required": false,
+  "historical_migrations_modified": 0,
+  "rls": "PASS",
+  "rls_runner": "READY",
+  "application_integration": "PASS",
+  "no_historical_db_dependency": "PASS",
+  "schema_sha256": "55629B9C3C435AFA74DE08FAD7FD32D18B4EABBE1117E83EB575DB24BC3B835D",
+  "production_connections": 0,
+  "production_side_effects": 0
+}

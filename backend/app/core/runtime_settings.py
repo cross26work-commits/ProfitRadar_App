@@ -8,7 +8,7 @@ PRODUCTION_REQUIRED = (
     "OAUTH_STATE_SECRET", "GMAIL_TOKEN_ENCRYPTION_KEYS", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
     "GOOGLE_REDIRECT_URI", "GMAIL_SCHEDULER_SECRET", "SCHEDULER_BACKEND_URL",
     "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID",
-    "WORKER_HEALTH_HOST", "WORKER_HEALTH_PORT", "WORKER_HEALTH_URL",
+    "WORKER_HEALTH_HOST", "WORKER_HEALTH_PORT", "WORKER_HEALTH_URL", "WORKER_HEALTH_EXPOSURE",
     "GMAIL_SYNC_INTERVAL_SECONDS", "WORKER_MAX_BACKOFF_SECONDS",
     "MONITORING_WEBHOOK_URL", "ACCOUNT_AUDIT_RETENTION_DAYS",
     "SUPPORT_ADMIN_USER_IDS", "CONTACT_RATE_LIMIT_SECRET", "SUPPORT_RETENTION_DAYS",
@@ -70,6 +70,11 @@ def validate_production():
     scheduler = urlsplit(os.environ["SCHEDULER_BACKEND_URL"])
     monitoring = urlsplit(os.environ["MONITORING_WEBHOOK_URL"])
     worker_health = urlsplit(os.environ["WORKER_HEALTH_URL"])
+    private_worker = (os.environ["WORKER_HEALTH_EXPOSURE"] == "railway-private"
+                      and os.environ["WORKER_HEALTH_HOST"] == "0.0.0.0"
+                      and worker_health.scheme == "http"
+                      and bool(worker_health.hostname)
+                      and worker_health.hostname.endswith(".railway.internal"))
     if (callback.scheme != "https" or not callback.hostname or callback.path != "/gmail/callback"
             or callback.username or callback.password or callback.query or callback.fragment
             or not scheduler.hostname or scheduler.username or scheduler.password or scheduler.query or scheduler.fragment
@@ -78,10 +83,10 @@ def validate_production():
         raise RuntimeError("Production provider endpoints are invalid")
     if (monitoring.scheme != "https" or not monitoring.hostname or monitoring.username
             or monitoring.password or monitoring.query or monitoring.fragment
-            or worker_health.scheme != "http" or worker_health.hostname not in {"localhost", "127.0.0.1"}
+            or (not private_worker and (worker_health.scheme != "http" or worker_health.hostname not in {"localhost", "127.0.0.1"}))
             or worker_health.username or worker_health.password or worker_health.query or worker_health.fragment
             or worker_health.path not in {"", "/"}
-            or os.environ["WORKER_HEALTH_HOST"] not in {"localhost", "127.0.0.1"}):
+            or (not private_worker and os.environ["WORKER_HEALTH_HOST"] not in {"localhost", "127.0.0.1"})):
         raise RuntimeError("Production monitoring endpoints are invalid")
     if production:
         for endpoint in (callback, scheduler):
@@ -116,6 +121,8 @@ def validate_production():
         if (not 1 <= worker_port <= 65535 or not 5 <= worker_interval <= 3600
                 or worker_backoff < worker_interval or worker_backoff > 86400
                 or not 1 <= retention_days <= 3650 or not 1 <= support_retention_days <= 3650):
+            raise ValueError()
+        if private_worker and worker_health.port != worker_port:
             raise ValueError()
         admin_ids = [value.strip() for value in os.environ["SUPPORT_ADMIN_USER_IDS"].split(",") if value.strip()]
         if not admin_ids or any(str(UUID(value)) != value.lower() for value in admin_ids):

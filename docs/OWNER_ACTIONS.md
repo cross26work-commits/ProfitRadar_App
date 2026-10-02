@@ -1,5 +1,7 @@
 # 本人操作と外部環境
 
+> 2026-10-02: use `PRODUCTION_OWNER_ACTIONS.md` for the current minimized eight-step deployment checklist. Historical project-specific records below remain evidence and are not authority to reuse or modify that project for the new deployment.
+
 ## 2026-09-28 P0 remediation後のOWNER actions（最新・順序固定）
 
 1. **法務・公開情報**: `frontend/.env.example` の販売者名/住所/電話/問い合わせ、返金、解約、削除、保持、国外移転、管轄、発効日を専門家と確定し、3つのapprovalをtrueにする。placeholderのまま`APP_ENV=production`は起動しない。
