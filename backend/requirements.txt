@@ -39,7 +39,7 @@ MarkupSafe==3.0.3
 marshmallow==4.3.0
 mdurl==0.1.2
 msgpack==1.2.1
-multidict==6.7.1
+multidict==6.9.1
 oauthlib==4.0.0
 openai==3.8.0
 packageurl-python==0.17.6

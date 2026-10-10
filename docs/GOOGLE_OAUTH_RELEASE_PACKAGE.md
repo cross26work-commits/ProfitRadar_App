@@ -1,6 +1,6 @@
 # Google OAuth production readiness package
 
-Checked 2026-09-28 against Google’s official documentation. This package does not submit an application or authorize an account.
+Scope classification rechecked 2026-10-10 against [Google’s official Gmail scope table](https://developers.google.com/workspace/gmail/api/auth/scopes); the verification/security-assessment requirements were also checked against [Google’s verification requirements](https://support.google.com/cloud/answer/13464321?hl=en). The production Console configuration and approval status remain **unverified**. This package does not submit an application or authorize an account.
 
 ## Exact runtime scopes
 

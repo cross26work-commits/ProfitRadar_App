@@ -1,0 +1,9 @@
+{
+  "name": "profit-radar-railway-iac",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned SDK for the reviewed Railway configuration plan; never deploy from this package",
+  "dependencies": {
+    "railway": "3.13.1"
+  }
+}

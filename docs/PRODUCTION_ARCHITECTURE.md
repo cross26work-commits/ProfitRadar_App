@@ -1,6 +1,8 @@
 # Production architecture
 
-Status: prepared, not deployed. This document contains no credential value and authorizes no external change.
+2026-10-11 state update: the sole STAGED frontend draft was discarded under owner approval. Railway has zero STAGED changes and zero applied services. The older 2026-10-09 STAGED description below is retained as historical context; see `docs/RAILWAY_RELEASE_CANDIDATE_20261011.md` for the current source review.
+
+Status (2026-10-09): Production Supabase `runxnxvwjqblyzdcegay` exists with the separately evidenced 23-migration checkpoint; Railway services are not applied. One frontend service is STAGED only. This document contains no credential value and authorizes no external change. See `PRODUCTION_MASTER_STATUS.md` for current gates.
 
 ## Runtime topology
 
@@ -24,7 +26,7 @@ The worker has no public domain. Its health listener may bind `0.0.0.0:$PORT` on
 
 ## Database identity warning
 
-Repository history records a previously operated project (`zszmetqhksthduoxfvac`), while this preparation request states that the intended Production project has not been created. These are not silently treated as the same environment. The owner must record the final Production project ref in the release ticket before any connection. The existing production E2E runner remains pinned to the historical ref and must not be repointed or run until that decision has a separate review.
+Repository history records a previously operated project (`zszmetqhksthduoxfvac`); it is **not** the selected Production target `runxnxvwjqblyzdcegay`. The existing production E2E runner remains pinned to the historical ref and must not be repointed or run without a separate review. The 23 fresh migrations are already reported applied to the selected target; do not replay them.
 
 ## Deployment order
 
